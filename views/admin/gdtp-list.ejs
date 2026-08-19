@@ -1,0 +1,28 @@
+<%- include('partials/header') %>
+
+<div class="page-head">
+  <h1>GDTP 設計師</h1>
+  <a class="btn" href="/admin/gdtp/new">+ 新增</a>
+</div>
+
+<table class="admin-table">
+  <thead><tr><th>相片</th><th>姓名</th><th>品牌</th><th>發佈</th><th>操作</th></tr></thead>
+  <tbody>
+    <% rows.forEach(function(r) { %>
+      <tr>
+        <td><% if (r.photo) { %><img class="thumb" src="<%= r.photo %>"><% } %></td>
+        <td><%= r.name_zh %><br><small><%= r.name_en %></small></td>
+        <td><%= r.brand_name %></td>
+        <td><%= r.is_published ? '已發佈' : '草稿' %></td>
+        <td>
+          <a href="/admin/gdtp/<%= r.id %>/edit">編輯</a>
+          <form method="POST" action="/admin/gdtp/<%= r.id %>/delete" onsubmit="return confirm('確定刪除?')" style="display:inline">
+            <button type="submit" class="link-btn">刪除</button>
+          </form>
+        </td>
+      </tr>
+    <% }) %>
+  </tbody>
+</table>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,29 @@
+<%- include('partials/header') %>
+
+<section class="section">
+  <h1>GDTP</h1>
+  <div class="card-grid">
+    <% designers.forEach(function(d) { %>
+      <div class="card designer-card">
+        <img src="<%= d.photo %>" alt="">
+        <h3><%= lang === 'zh' ? d.name_zh : d.name_en %></h3>
+        <p><%= d.brand_name %></p>
+        <div><%- lang === 'zh' ? d.bio_zh : d.bio_en %></div>
+        <% if (d.website) { %><a href="<%= d.website %>" target="_blank" rel="noopener">Website</a><% } %>
+        <% if (d.instagram) { %><a href="https://instagram.com/<%= d.instagram %>" target="_blank" rel="noopener">IG</a><% } %>
+      </div>
+    <% }) %>
+  </div>
+
+  <h2><%= lang === 'zh' ? '刊物' : 'Publications' %></h2>
+  <div class="card-grid">
+    <% publications.forEach(function(p) { %>
+      <a class="card" href="<%= p.pdf_url %>" target="_blank" rel="noopener">
+        <img src="<%= p.cover_image %>" alt="">
+        <p><%= t(p, 'title') %></p>
+      </a>
+    <% }) %>
+  </div>
+</section>
+
+<%- include('partials/footer') %>

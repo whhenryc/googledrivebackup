@@ -1,0 +1,32 @@
+<%- include('partials/header') %>
+
+<h1><%= item ? '編輯' : '新增' %>區塊 (<%= pageKey %>)</h1>
+
+<form method="POST" action="<%= item ? `/admin/pages/${pageKey}/${item.id}` : `/admin/pages/${pageKey}` %>" enctype="multipart/form-data" class="admin-form">
+  <label>Block Key (英文代號，例如 intro / sponsor / organiser)
+    <input type="text" name="block_key" value="<%= item ? item.block_key : '' %>" <%= item ? 'readonly' : '' %> required>
+  </label>
+
+  <div class="form-row">
+    <label>標題 (中文)<input type="text" name="title_zh" value="<%= item ? item.title_zh : '' %>"></label>
+    <label>標題 (English)<input type="text" name="title_en" value="<%= item ? item.title_en : '' %>"></label>
+  </div>
+
+  <div class="form-row">
+    <label>內容 (中文，支援 HTML)<textarea name="content_zh" rows="8"><%= item ? item.content_zh : '' %></textarea></label>
+    <label>內容 (English，支援 HTML)<textarea name="content_en" rows="8"><%= item ? item.content_en : '' %></textarea></label>
+  </div>
+
+  <label>圖片<input type="file" name="image" accept="image/*"></label>
+  <% if (item && item.image) { %>
+    <img class="thumb-preview" src="<%= item.image %>">
+    <input type="hidden" name="existing_image" value="<%= item.image %>">
+  <% } %>
+
+  <label>排序<input type="number" name="sort_order" value="<%= item ? item.sort_order : 0 %>"></label>
+
+  <button type="submit" class="btn">儲存</button>
+  <a href="/admin/pages/<%= pageKey %>" class="btn-secondary">取消</a>
+</form>
+
+<%- include('partials/footer') %>

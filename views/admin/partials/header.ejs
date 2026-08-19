@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof pageTitle !== 'undefined' ? pageTitle : '後台管理' %></title>
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+  <div class="admin-layout">
+    <aside class="sidebar">
+      <h2>後台管理</h2>
+      <nav>
+        <a href="/admin">總覽 Dashboard</a>
+        <a href="/admin/theme">🎨 網站設計</a>
+        <a href="/admin/pages/home">首頁內容 (Hero圖)</a>
+        <a href="/admin/news">最新消息 News</a>
+        <a href="/admin/programmes">活動資訊 Programmes</a>
+        <a href="/admin/gdtp">GDTP 設計師</a>
+        <a href="/admin/press">媒體報導 Press</a>
+        <a href="/admin/publications">刊物 Publications</a>
+        <a href="/admin/pages/about">關於我們 內容</a>
+        <a href="/admin/pages/contact">聯絡我們 內容</a>
+      </nav>
+      <form method="POST" action="/admin/logout">
+        <button type="submit" class="logout-btn">登出</button>
+      </form>
+    </aside>
+    <main class="admin-main">

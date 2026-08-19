@@ -1,0 +1,13 @@
+<%- include('partials/header') %>
+
+<section class="section">
+  <h1><%= lang === 'zh' ? '聯絡我們' : 'Contact' %></h1>
+  <% Object.values(blocks).forEach(function(block) { %>
+    <div class="contact-block">
+      <h3><%= t(block, 'title') %></h3>
+      <div><%- t(block, 'content') %></div>
+    </div>
+  <% }) %>
+</section>
+
+<%- include('partials/footer') %>

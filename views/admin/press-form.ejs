@@ -1,0 +1,31 @@
+<%- include('partials/header') %>
+
+<h1><%= item ? '編輯' : '新增' %>媒體報導</h1>
+
+<form method="POST" action="<%= item ? `/admin/press/${item.id}` : '/admin/press' %>" enctype="multipart/form-data" class="admin-form">
+  <div class="form-row">
+    <label>標題 (中文)<input type="text" name="title_zh" value="<%= item ? item.title_zh : '' %>" required></label>
+    <label>標題 (English)<input type="text" name="title_en" value="<%= item ? item.title_en : '' %>" required></label>
+  </div>
+  <div class="form-row">
+    <label>來源 (e.g. Muse TV)<input type="text" name="source_name" value="<%= item ? item.source_name : '' %>"></label>
+    <label>發佈日期<input type="date" name="published_date" value="<%= item ? item.published_date : '' %>"></label>
+  </div>
+  <label>連結網址<input type="text" name="link_url" value="<%= item ? item.link_url : '' %>"></label>
+
+  <label>封面圖<input type="file" name="cover_image" accept="image/*"></label>
+  <% if (item && item.cover_image) { %>
+    <img class="thumb-preview" src="<%= item.cover_image %>">
+    <input type="hidden" name="existing_cover" value="<%= item.cover_image %>">
+  <% } %>
+
+  <div class="form-row">
+    <label>排序<input type="number" name="sort_order" value="<%= item ? item.sort_order : 0 %>"></label>
+    <label class="checkbox"><input type="checkbox" name="is_published" <%= (!item || item.is_published) ? 'checked' : '' %>> 已發佈</label>
+  </div>
+
+  <button type="submit" class="btn">儲存</button>
+  <a href="/admin/press" class="btn-secondary">取消</a>
+</form>
+
+<%- include('partials/footer') %>

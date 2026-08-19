@@ -1,0 +1,10 @@
+<%- include('partials/header') %>
+
+<section class="section">
+  <a class="back-link" href="/<%= lang %>/news">&larr; <%= lang === 'zh' ? '返回最新消息' : 'Back to News' %></a>
+  <h1><%= t(item, 'title') %></h1>
+  <img class="cover" src="<%= item.cover_image %>" alt="">
+  <div class="content"><%- t(item, 'content') %></div>
+</section>
+
+<%- include('partials/footer') %>

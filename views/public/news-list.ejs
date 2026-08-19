@@ -1,0 +1,17 @@
+<%- include('partials/header') %>
+
+<section class="section">
+  <h1><%= lang === 'zh' ? '最新消息' : 'News' %></h1>
+  <div class="card-grid">
+    <% news.forEach(function(n) { %>
+      <a class="card" href="<%= n.link_type === 'internal' ? `/${lang}/news/${n.slug}` : n.link_url %>"
+         <%= n.link_type === 'external' ? 'target="_blank" rel="noopener"' : '' %>>
+        <img src="<%= n.cover_image %>" alt="">
+        <h3><%= t(n, 'title') %></h3>
+        <p><%= t(n, 'summary') %></p>
+      </a>
+    <% }) %>
+  </div>
+</section>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,142 @@
+<%- include('partials/header') %>
+
+<% if (heroImage) { %>
+  <section class="hero-banner">
+    <img src="<%= heroImage %>" alt="">
+  </section>
+<% } else { %>
+  <section class="hero">
+    <h1><%= about.intro ? t(about.intro, 'title') : '' %></h1>
+  </section>
+<% } %>
+
+<section class="section<%= sectionBg.news ? ' section-styled' : '' %>"
+  <% if (sectionBg.news) { %>style="background-image:url('<%= sectionBg.news %>')"<% } %>>
+  <div class="section-styled-head">
+    <h2><%= lang === 'zh' ? '最新消息' : 'News' %></h2>
+    <a class="btn-more" href="/<%= lang %>/news"><%= lang === 'zh' ? '更多' : 'MORE' %> »</a>
+  </div>
+  <% if (news.length) { %>
+    <div class="card-slider-wrap" data-slider>
+      <button class="slider-arrow" data-slider-prev aria-label="prev">‹</button>
+      <div class="card-slider">
+        <% news.forEach(function(n) { %>
+          <div class="feature-slide">
+            <img src="<%= n.cover_image %>" alt="">
+            <div class="slide-text">
+              <h3><%= t(n, 'title') %></h3>
+              <p><%= t(n, 'summary') %></p>
+              <a class="view-link" href="<%= n.link_type === 'internal' ? `/${lang}/news/${n.slug}` : n.link_url %>"
+                 <%= n.link_type === 'external' ? 'target="_blank" rel="noopener"' : '' %>>
+                <%= lang === 'zh' ? '觀看' : 'VIEW' %> »
+              </a>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+      <button class="slider-arrow" data-slider-next aria-label="next">›</button>
+    </div>
+  <% } %>
+</section>
+
+<section class="section section-light"
+  <% if (sectionBg.programmes) { %>style="background-image:url('<%= sectionBg.programmes %>')"<% } %>>
+  <div class="section-styled-head">
+    <h2><%= lang === 'zh' ? '活動資訊' : 'Programmes' %></h2>
+    <a class="btn-more" href="/<%= lang %>/programmes"><%= lang === 'zh' ? '更多' : 'MORE' %> »</a>
+  </div>
+  <% if (programmes.length) { %>
+    <div class="card-slider-wrap" data-slider>
+      <button class="slider-arrow" data-slider-prev aria-label="prev">‹</button>
+      <div class="card-slider">
+        <% programmes.forEach(function(p) { %>
+          <div class="feature-slide">
+            <img src="<%= p.cover_image %>" alt="">
+            <div class="slide-text">
+              <h3><%= t(p, 'title') %></h3>
+              <ul class="meta-list">
+                <% if (t(p, 'date_text')) { %><li><span class="meta-icon">📅</span><span><%= t(p, 'date_text') %></span></li><% } %>
+                <% if (t(p, 'location')) { %><li><span class="meta-icon">📍</span><span><%= t(p, 'location') %></span></li><% } %>
+              </ul>
+              <a class="view-link" href="/<%= lang %>/programmes/<%= p.slug %>">
+                <%= lang === 'zh' ? '觀看' : 'VIEW' %> »
+              </a>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+      <button class="slider-arrow" data-slider-next aria-label="next">›</button>
+    </div>
+  <% } %>
+</section>
+
+<section class="section section-styled section-centered"
+  <% if (sectionBg.publications) { %>style="background-image:url('<%= sectionBg.publications %>')"<% } %>>
+  <h2><%= lang === 'zh' ? '刊物' : 'Publications' %></h2>
+  <div class="publications-row">
+    <% publications.forEach(function(p) { %>
+      <div class="publication-item">
+        <img src="<%= p.cover_image %>" alt="">
+        <a class="btn-more" href="<%= p.pdf_url %>" target="_blank" rel="noopener">
+          <%= lang === 'zh' ? '按此閱讀' : 'READ NOW' %> »
+        </a>
+      </div>
+    <% }) %>
+  </div>
+</section>
+
+<section class="section gdtp-summary">
+  <h2><%= lang === 'zh' ? 'GDTP' : '2nd Global Denim Talent Programme (GDTP)' %></h2>
+  <div class="gdtp-photo-row">
+    <% designers.forEach(function(d) { %>
+      <img src="<%= d.photo %>" alt="<%= lang === 'zh' ? d.name_zh : d.name_en %>">
+    <% }) %>
+  </div>
+  <% if (gdtpIntro) { %><p><%= t(gdtpIntro, 'content') %></p><% } %>
+  <a class="btn-more" href="/<%= lang %>/gdtp"><%= lang === 'zh' ? '更多' : 'MORE' %> »</a>
+</section>
+
+<section class="section section-styled section-centered"
+  <% if (sectionBg.about) { %>style="background-image:url('<%= sectionBg.about %>')"<% } %>>
+  <h2><%= lang === 'zh' ? '關於我們' : 'About Us' %></h2>
+  <% if (about.intro) { %>
+    <p style="max-width:700px; margin:0 auto 24px; line-height:1.8;"><%= t(about.intro, 'content') %></p>
+  <% } %>
+  <a class="btn-more" href="/<%= lang %>/about"><%= lang === 'zh' ? '更多' : 'MORE' %> »</a>
+</section>
+
+<section class="section section-light">
+  <h2><%= lang === 'zh' ? '媒體報導' : 'Media Coverages' %></h2>
+  <% if (press.length) { %>
+    <div class="card-grid">
+      <% press.forEach(function(p) { %>
+        <div class="card">
+          <img src="<%= p.cover_image %>" alt="">
+          <p class="date"><%= p.published_date %> · <%= p.source_name %></p>
+          <h3><%= t(p, 'title') %></h3>
+          <a class="view-link" style="display:block; margin:0 12px 12px;" href="<%= p.link_url %>" target="_blank" rel="noopener">
+            <%= lang === 'zh' ? '觀看' : 'VIEW' %> »
+          </a>
+        </div>
+      <% }) %>
+    </div>
+  <% } %>
+  <div style="text-align:center; margin-top:32px;">
+    <a class="btn-more" href="/<%= lang %>/press"><%= lang === 'zh' ? '更多' : 'MORE' %> »</a>
+  </div>
+</section>
+
+<section class="section section-styled section-centered" id="contact"
+  <% if (sectionBg.contact) { %>style="background-image:url('<%= sectionBg.contact %>')"<% } %>>
+  <h2><%= lang === 'zh' ? '聯絡我們' : 'Contact Us' %></h2>
+  <div class="contact-columns">
+    <% Object.values(contact).forEach(function(block) { %>
+      <div>
+        <h3><%= t(block, 'title') %></h3>
+        <div><%- t(block, 'content') %></div>
+      </div>
+    <% }) %>
+  </div>
+</section>
+
+<%- include('partials/footer') %>

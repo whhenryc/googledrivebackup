@@ -1,0 +1,48 @@
+<%- include('partials/header') %>
+
+<h1>網站設計</h1>
+<p style="color:#666; margin-bottom:24px;">呢度改嘅嘢會即時套用去前台所有頁面，唔使重新部署。</p>
+
+<form method="POST" action="/admin/theme" enctype="multipart/form-data" class="admin-form">
+
+  <h3 style="margin:0;">顏色</h3>
+  <div class="form-row">
+    <label>主色調 (連結/按鈕/強調色)
+      <input type="color" name="theme_primary_color" value="<%= theme.theme_primary_color %>">
+    </label>
+    <label>背景色
+      <input type="color" name="theme_bg_color" value="<%= theme.theme_bg_color %>">
+    </label>
+    <label>文字色
+      <input type="color" name="theme_text_color" value="<%= theme.theme_text_color %>">
+    </label>
+  </div>
+
+  <h3 style="margin:0;">字體</h3>
+  <label>字體 (CSS font-family值，可以填多個fallback)
+    <input type="text" name="theme_font_family" value="<%= theme.theme_font_family %>">
+  </label>
+  <label>Google Fonts連結 (可選，去 fonts.google.com 揀字體，複製個 &lt;link&gt; 網址貼入嚟)
+    <input type="text" name="theme_google_font_url" value="<%= theme.theme_google_font_url %>" placeholder="https://fonts.googleapis.com/css2?family=...">
+  </label>
+  <p style="font-size:13px; color:#888; margin-top:-8px;">
+    貼咗Google Fonts連結之後，記得喺上面「字體」欄填返個字體名，例如 <code>'Noto Sans TC', sans-serif</code>
+  </p>
+
+  <h3 style="margin:0;">Logo</h3>
+  <label>上傳新Logo
+    <input type="file" name="logo_file" accept="image/*">
+  </label>
+  <img class="thumb-preview" src="<%= theme.theme_logo %>">
+  <input type="hidden" name="existing_logo" value="<%= theme.theme_logo %>">
+
+  <h3 style="margin:0;">自訂CSS (進階)</h3>
+  <label>直接寫CSS，可以覆蓋任何樣式 (留空即可)
+    <textarea name="theme_custom_css" rows="8" style="font-family: monospace; font-size:13px;"><%= theme.theme_custom_css %></textarea>
+  </label>
+
+  <button type="submit" class="btn">儲存並套用</button>
+  <a href="/zh" target="_blank" class="btn-secondary">預覽前台 ↗</a>
+</form>
+
+<%- include('partials/footer') %>

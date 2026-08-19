@@ -1,0 +1,29 @@
+<%- include('partials/header') %>
+
+<div class="page-head">
+  <h1>活動資訊</h1>
+  <a class="btn" href="/admin/programmes/new">+ 新增</a>
+</div>
+
+<table class="admin-table">
+  <thead><tr><th>封面</th><th>標題</th><th>上層活動</th><th>日期</th><th>發佈</th><th>操作</th></tr></thead>
+  <tbody>
+    <% rows.forEach(function(r) { %>
+      <tr>
+        <td><% if (r.cover_image) { %><img class="thumb" src="<%= r.cover_image %>"><% } %></td>
+        <td><%= r.parent_id ? '　└ ' : '' %><%= r.title_zh %><br><small><%= r.title_en %></small></td>
+        <td><%= r.parent_id || '-' %></td>
+        <td><%= r.date_text_zh %></td>
+        <td><%= r.is_published ? '已發佈' : '草稿' %></td>
+        <td>
+          <a href="/admin/programmes/<%= r.id %>/edit">編輯</a>
+          <form method="POST" action="/admin/programmes/<%= r.id %>/delete" onsubmit="return confirm('確定刪除? (子活動亦會被刪除)')" style="display:inline">
+            <button type="submit" class="link-btn">刪除</button>
+          </form>
+        </td>
+      </tr>
+    <% }) %>
+  </tbody>
+</table>
+
+<%- include('partials/footer') %>

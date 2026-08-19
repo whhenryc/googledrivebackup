@@ -1,0 +1,241 @@
+:root {
+  --color-bg: #ffffff;
+  --color-text: #111111;
+  --color-accent: #7a1f1f;
+  --max-width: 1200px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, "PingFang HK", "Noto Sans TC", sans-serif; color: var(--color-text); background: var(--color-bg); }
+img { max-width: 100%; display: block; }
+a { color: inherit; text-decoration: none; }
+
+.site-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 32px; border-bottom: 1px solid #eee; }
+.site-header .logo img { height: 40px; }
+.main-nav { display: flex; gap: 24px; }
+.main-nav a:hover { color: var(--color-accent); }
+.lang-switch { display: flex; gap: 8px; }
+
+main { max-width: var(--max-width); margin: 0 auto; padding: 32px; }
+.hero-banner {
+  max-width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  margin-top: -32px;
+  margin-bottom: 32px;
+  overflow: hidden;
+}
+.hero-banner img { width: 100%; display: block; }
+.section { margin-bottom: 64px; }
+.section h2 { font-size: 24px; margin-bottom: 24px; border-left: 4px solid var(--color-accent); padding-left: 12px; }
+
+/* ---------- Styled section (全版底圖 + 白字) ---------- */
+.section-styled {
+  max-width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  margin-bottom: 0;
+  padding: 56px calc(50vw - 50% + 32px);
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  color: #fff;
+}
+.section-styled::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 30, 60, 0.55); /* 深色遮罩，確保白字睇得清 */
+  z-index: 0;
+}
+.section-styled > * { position: relative; z-index: 1; }
+.section-styled h2 {
+  color: #fff;
+  border-left: none;
+  padding-left: 0;
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+.section-styled-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+
+/* ---------- Light section (白/淺底 + navy字，Programmes/Media Coverages用) ---------- */
+.section-light {
+  max-width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  margin-bottom: 0;
+  padding: 56px calc(50vw - 50% + 32px);
+  background-size: cover;
+  background-position: center;
+  background-color: #eef1f6;
+  position: relative;
+  color: var(--color-text);
+}
+.section-light::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.72); /* 淺色遮罩，令底圖淡化做watermark質感 */
+  z-index: 0;
+}
+.section-light > * { position: relative; z-index: 1; }
+.section-light h2 {
+  color: var(--color-accent);
+  border-left: none;
+  padding-left: 0;
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+.section-light .feature-slide .slide-text,
+.section-light .slide-text h3 { color: var(--color-text); }
+.section-light .feature-slide .slide-text p { opacity: .8; }
+.section-light .view-link { color: var(--color-accent); }
+.section-light .card { background: #fff; }
+
+/* 標題置中 / 靠左 兩種排版修飾class */
+.section-centered { text-align: center; }
+.section-centered .section-styled-head { flex-direction: column; gap: 20px; }
+
+/* ---------- MORE按鈕 (黃底pill) ---------- */
+.btn-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f2c145;
+  color: #14203c;
+  font-weight: 800;
+  padding: 10px 22px;
+  border-radius: 4px;
+  text-decoration: none;
+  letter-spacing: .5px;
+  transition: transform .15s;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+}
+.btn-more:hover { transform: translateY(-2px); }
+.section-styled .more-link { color: #fff; }
+
+/* ---------- 日期/時間/地點 icon list (Programmes用) ---------- */
+.meta-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.meta-list li { display: flex; align-items: flex-start; gap: 8px; }
+.meta-list .meta-icon { flex: 0 0 auto; opacity: .8; }
+
+/* ---------- Card Slider (輪播) ---------- */
+.card-slider-wrap { display: flex; align-items: center; gap: 12px; }
+.card-slider {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  flex: 1;
+}
+.card-slider::-webkit-scrollbar { display: none; }
+
+/* 一個feature-slide = 左邊圖 + 右邊文字，成組一齊swipe */
+.card-slider .feature-slide {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  display: flex;
+  align-items: center;
+  gap: 40px;
+  padding: 8px 4px;
+}
+.feature-slide img {
+  width: 280px;
+  flex: 0 0 280px;
+  box-shadow: 0 12px 28px rgba(0,0,0,.35);
+  border-radius: 4px;
+}
+.feature-slide .slide-text { color: #fff; display: flex; flex-direction: column; gap: 16px; }
+.feature-slide .slide-text h3 { font-size: 30px; margin: 0; font-weight: 800; line-height: 1.25; }
+.feature-slide .slide-text p { margin: 0; line-height: 1.7; opacity: .92; }
+.feature-slide .view-link { color: #fff; font-weight: 800; letter-spacing: .5px; }
+
+/* 冇底圖時(普通card grid)嘅slider版本，一次顯示多張card */
+.card-slider .card-slide {
+  flex: 0 0 280px;
+  scroll-snap-align: start;
+}
+
+.slider-arrow {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+.slider-arrow:hover { background: rgba(255,255,255,.15); }
+
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 24px; }
+.card { border: 1px solid #eee; border-radius: 8px; overflow: hidden; transition: box-shadow .2s; }
+.card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+.card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; }
+.card h3, .card p { margin: 8px 12px; }
+.card .date { font-size: 12px; color: #888; margin: 8px 12px 0; }
+
+.more-link { display: inline-block; margin-top: 16px; color: var(--color-accent); font-weight: 600; }
+
+/* ---------- Publications 一排 + 每本獨立READ NOW按鈕 ---------- */
+.publications-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 40px;
+}
+.publication-item { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.publication-item img {
+  width: 220px;
+  box-shadow: 0 12px 28px rgba(0,0,0,.35);
+  border-radius: 4px;
+}
+
+/* ---------- GDTP 首頁摘要：白底/置中/相片一排 ---------- */
+.gdtp-summary { text-align: center; }
+.gdtp-photo-row {
+  display: flex;
+  gap: 4px;
+  margin: 32px 0;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.gdtp-photo-row img { width: 220px; aspect-ratio: 3/4; object-fit: cover; flex: 1 1 220px; max-width: 260px; }
+.gdtp-summary p { max-width: 900px; margin: 0 auto 24px; line-height: 1.7; }
+.gdtp-summary .btn-more { display: inline-flex; }
+
+/* ---------- Contact 首頁摘要：雙欄 ---------- */
+.contact-columns {
+  display: flex;
+  justify-content: center;
+  gap: 120px;
+  flex-wrap: wrap;
+  text-align: center;
+}
+.contact-columns h3 { font-size: 22px; margin: 0 0 12px; }
+.contact-columns p { margin: 4px 0; }
+.social-links { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.social-links a { display: flex; align-items: center; gap: 8px; }
+
+.content-block, .contact-block { margin-bottom: 32px; }
+.content-block img { margin-bottom: 16px; border-radius: 8px; }
+
+.back-link { display: inline-block; margin-bottom: 16px; }
+.cover { width: 100%; border-radius: 8px; margin-bottom: 24px; }
+
+.site-footer { text-align: center; padding: 32px; border-top: 1px solid #eee; color: #888; font-size: 14px; }
+
+@media (max-width: 720px) {
+  .feature-slide { flex-direction: column; align-items: flex-start; gap: 20px; }
+  .feature-slide img { width: 100%; flex-basis: auto; }
+  .section-styled { padding: 40px 20px; }
+  .section-styled h2 { font-size: 26px; }
+  .main-nav { display: none; } /* 細螢幕先簡單隱藏，日後可以加漢堡選單 */
+}

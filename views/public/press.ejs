@@ -1,0 +1,16 @@
+<%- include('partials/header') %>
+
+<section class="section">
+  <h1><%= lang === 'zh' ? '媒體報導' : 'Press' %></h1>
+  <div class="card-grid">
+    <% press.forEach(function(p) { %>
+      <a class="card" href="<%= p.link_url %>" target="_blank" rel="noopener">
+        <img src="<%= p.cover_image %>" alt="">
+        <p class="date"><%= p.published_date %> · <%= p.source_name %></p>
+        <h3><%= t(p, 'title') %></h3>
+      </a>
+    <% }) %>
+  </div>
+</section>
+
+<%- include('partials/footer') %>

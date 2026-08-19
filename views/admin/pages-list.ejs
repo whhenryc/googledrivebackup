@@ -1,0 +1,26 @@
+<%- include('partials/header') %>
+
+<div class="page-head">
+  <h1>頁面內容: <%= pageKey %></h1>
+  <a class="btn" href="/admin/pages/<%= pageKey %>/new">+ 新增區塊</a>
+</div>
+
+<table class="admin-table">
+  <thead><tr><th>Block Key</th><th>標題</th><th>操作</th></tr></thead>
+  <tbody>
+    <% rows.forEach(function(r) { %>
+      <tr>
+        <td><%= r.block_key %></td>
+        <td><%= r.title_zh %><br><small><%= r.title_en %></small></td>
+        <td>
+          <a href="/admin/pages/<%= pageKey %>/<%= r.id %>/edit">編輯</a>
+          <form method="POST" action="/admin/pages/<%= pageKey %>/<%= r.id %>/delete" onsubmit="return confirm('確定刪除?')" style="display:inline">
+            <button type="submit" class="link-btn">刪除</button>
+          </form>
+        </td>
+      </tr>
+    <% }) %>
+  </tbody>
+</table>
+
+<%- include('partials/footer') %>

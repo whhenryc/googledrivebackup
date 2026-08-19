@@ -1,0 +1,28 @@
+<%- include('partials/header') %>
+
+<div class="page-head">
+  <h1>最新消息</h1>
+  <a class="btn" href="/admin/news/new">+ 新增</a>
+</div>
+
+<table class="admin-table">
+  <thead><tr><th>封面</th><th>標題</th><th>連結類型</th><th>發佈</th><th>操作</th></tr></thead>
+  <tbody>
+    <% rows.forEach(function(r) { %>
+      <tr>
+        <td><% if (r.cover_image) { %><img class="thumb" src="<%= r.cover_image %>"><% } %></td>
+        <td><%= r.title_zh %><br><small><%= r.title_en %></small></td>
+        <td><%= r.link_type %></td>
+        <td><%= r.is_published ? '已發佈' : '草稿' %></td>
+        <td>
+          <a href="/admin/news/<%= r.id %>/edit">編輯</a>
+          <form method="POST" action="/admin/news/<%= r.id %>/delete" onsubmit="return confirm('確定刪除?')" style="display:inline">
+            <button type="submit" class="link-btn">刪除</button>
+          </form>
+        </td>
+      </tr>
+    <% }) %>
+  </tbody>
+</table>
+
+<%- include('partials/footer') %>

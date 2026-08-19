@@ -1,0 +1,14 @@
+<%- include('partials/header') %>
+
+<section class="section">
+  <h1><%= lang === 'zh' ? '關於我們' : 'About Us' %></h1>
+  <% Object.values(blocks).forEach(function(block) { %>
+    <div class="content-block">
+      <% if (block.image) { %><img src="<%= block.image %>" alt=""><% } %>
+      <h2><%= t(block, 'title') %></h2>
+      <div><%- t(block, 'content') %></div>
+    </div>
+  <% }) %>
+</section>
+
+<%- include('partials/footer') %>

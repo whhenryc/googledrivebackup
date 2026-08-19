@@ -1,0 +1,53 @@
+<%- include('partials/header') %>
+
+<h1><%= item ? '編輯' : '新增' %>活動</h1>
+
+<form method="POST" action="<%= item ? `/admin/programmes/${item.id}` : '/admin/programmes' %>" enctype="multipart/form-data" class="admin-form">
+  <div class="form-row">
+    <label>標題 (中文)<input type="text" name="title_zh" value="<%= item ? item.title_zh : '' %>" required></label>
+    <label>標題 (English)<input type="text" name="title_en" value="<%= item ? item.title_en : '' %>" required></label>
+  </div>
+
+  <label>Slug (網址用，留空自動生成)<input type="text" name="slug" value="<%= item ? item.slug : '' %>"></label>
+
+  <label>上層活動 (如呢個係子活動，例如 Showcase 屬於 CENTRESTAGE2025)
+    <select name="parent_id">
+      <option value="">— 無 (頂層活動) —</option>
+      <% parents.forEach(function(p) { %>
+        <option value="<%= p.id %>" <%= item && item.parent_id == p.id ? 'selected' : '' %>><%= p.title_zh %></option>
+      <% }) %>
+    </select>
+  </label>
+
+  <div class="form-row">
+    <label>日期文字 (中文)<input type="text" name="date_text_zh" value="<%= item ? item.date_text_zh : '' %>" placeholder="2025年9月3日至6日..."></label>
+    <label>日期文字 (English)<input type="text" name="date_text_en" value="<%= item ? item.date_text_en : '' %>"></label>
+  </div>
+  <div class="form-row">
+    <label>地點 (中文)<input type="text" name="location_zh" value="<%= item ? item.location_zh : '' %>"></label>
+    <label>地點 (English)<input type="text" name="location_en" value="<%= item ? item.location_en : '' %>"></label>
+  </div>
+
+  <div class="form-row">
+    <label>內文 (中文)<textarea name="content_zh" rows="6"><%= item ? item.content_zh : '' %></textarea></label>
+    <label>內文 (English)<textarea name="content_en" rows="6"><%= item ? item.content_en : '' %></textarea></label>
+  </div>
+
+  <label>外部連結 (如活動連去其他網站)<input type="text" name="external_link" value="<%= item ? item.external_link : '' %>"></label>
+
+  <label>封面圖<input type="file" name="cover_image" accept="image/*"></label>
+  <% if (item && item.cover_image) { %>
+    <img class="thumb-preview" src="<%= item.cover_image %>">
+    <input type="hidden" name="existing_cover" value="<%= item.cover_image %>">
+  <% } %>
+
+  <div class="form-row">
+    <label>排序<input type="number" name="sort_order" value="<%= item ? item.sort_order : 0 %>"></label>
+    <label class="checkbox"><input type="checkbox" name="is_published" <%= (!item || item.is_published) ? 'checked' : '' %>> 已發佈</label>
+  </div>
+
+  <button type="submit" class="btn">儲存</button>
+  <a href="/admin/programmes" class="btn-secondary">取消</a>
+</form>
+
+<%- include('partials/footer') %>

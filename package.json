@@ -1,20 +1,25 @@
 {
-  "name": "drive-transfer-web",
+  "name": "denim-festival-site",
   "version": "1.0.0",
-  "description": "Step-by-step Web UI for server-side copying a Google Drive folder to another location, without local download.",
+  "description": "活動網站骨架 - 雙語(EN/繁)前台 + 後台CMS",
   "main": "server.js",
   "engines": {
-    "node": ">=18"
+    "node": "20.x"
   },
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node server.js",
+    "seed": "node db/seed.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",
+    "bcryptjs": "^2.4.3",
+    "connect-sqlite3": "^0.9.15",
     "dotenv": "^16.4.5",
-    "express": "^4.19.2",
+    "ejs": "^3.1.10",
+    "express": "^4.21.0",
     "express-session": "^1.18.0",
-    "googleapis": "^140.0.0"
+    "method-override": "^3.0.0",
+    "multer": "^1.4.5-lts.1"
   }
 }

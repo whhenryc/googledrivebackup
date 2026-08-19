@@ -1,0 +1,17 @@
+<%- include('partials/header') %>
+
+<section class="section">
+  <h1><%= lang === 'zh' ? '活動資訊' : 'Programmes' %></h1>
+  <div class="card-grid">
+    <% programmes.forEach(function(p) { %>
+      <a class="card" href="/<%= lang %>/programmes/<%= p.slug %>">
+        <img src="<%= p.cover_image %>" alt="">
+        <h3><%= t(p, 'title') %></h3>
+        <p><%= t(p, 'date_text') %></p>
+        <p><%= t(p, 'location') %></p>
+      </a>
+    <% }) %>
+  </div>
+</section>
+
+<%- include('partials/footer') %>

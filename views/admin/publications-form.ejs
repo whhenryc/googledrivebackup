@@ -1,0 +1,29 @@
+<%- include('partials/header') %>
+
+<h1><%= item ? '編輯' : '新增' %>刊物</h1>
+
+<form method="POST" action="<%= item ? `/admin/publications/${item.id}` : '/admin/publications' %>" enctype="multipart/form-data" class="admin-form">
+  <div class="form-row">
+    <label>標題 (中文)<input type="text" name="title_zh" value="<%= item ? item.title_zh : '' %>" required></label>
+    <label>標題 (English)<input type="text" name="title_en" value="<%= item ? item.title_en : '' %>" required></label>
+  </div>
+
+  <label>封面圖<input type="file" name="cover_image" accept="image/*"></label>
+  <% if (item && item.cover_image) { %>
+    <img class="thumb-preview" src="<%= item.cover_image %>">
+    <input type="hidden" name="existing_cover" value="<%= item.cover_image %>">
+  <% } %>
+
+  <label>PDF 檔案上傳<input type="file" name="pdf_file" accept="application/pdf"></label>
+  <label>或直接填 PDF 網址<input type="text" name="pdf_url" value="<%= item ? item.pdf_url : '' %>" placeholder="https://..."></label>
+
+  <div class="form-row">
+    <label>排序<input type="number" name="sort_order" value="<%= item ? item.sort_order : 0 %>"></label>
+    <label class="checkbox"><input type="checkbox" name="is_published" <%= (!item || item.is_published) ? 'checked' : '' %>> 已發佈</label>
+  </div>
+
+  <button type="submit" class="btn">儲存</button>
+  <a href="/admin/publications" class="btn-secondary">取消</a>
+</form>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,22 @@
+<%- include('partials/header') %>
+
+<section class="section">
+  <a class="back-link" href="/<%= lang %>/programmes">&larr; <%= lang === 'zh' ? '返回活動資訊' : 'Back to Programmes' %></a>
+  <h1><%= t(item, 'title') %></h1>
+  <img class="cover" src="<%= item.cover_image %>" alt="">
+  <p class="meta"><%= t(item, 'date_text') %> · <%= t(item, 'location') %></p>
+  <div class="content"><%- t(item, 'content') %></div>
+
+  <% if (children.length) { %>
+    <div class="card-grid">
+      <% children.forEach(function(c) { %>
+        <a class="card" href="/<%= lang %>/programmes/<%= c.slug %>">
+          <img src="<%= c.cover_image %>" alt="">
+          <h3><%= t(c, 'title') %></h3>
+        </a>
+      <% }) %>
+    </div>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

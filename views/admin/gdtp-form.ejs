@@ -1,0 +1,46 @@
+<%- include('partials/header') %>
+
+<h1><%= item ? '編輯' : '新增' %>設計師</h1>
+
+<form method="POST" action="<%= item ? `/admin/gdtp/${item.id}` : '/admin/gdtp' %>" enctype="multipart/form-data" class="admin-form">
+  <div class="form-row">
+    <label>姓名 (中文)<input type="text" name="name_zh" value="<%= item ? item.name_zh : '' %>" required></label>
+    <label>姓名 (English)<input type="text" name="name_en" value="<%= item ? item.name_en : '' %>" required></label>
+  </div>
+  <label>品牌名稱<input type="text" name="brand_name" value="<%= item ? item.brand_name : '' %>"></label>
+  <div class="form-row">
+    <label>代表作品名稱 (中文)<input type="text" name="collection_name_zh" value="<%= item ? item.collection_name_zh : '' %>"></label>
+    <label>代表作品名稱 (English)<input type="text" name="collection_name_en" value="<%= item ? item.collection_name_en : '' %>"></label>
+  </div>
+  <div class="form-row">
+    <label>Instagram handle (唔使 @)<input type="text" name="instagram" value="<%= item ? item.instagram : '' %>"></label>
+    <label>官方網站<input type="text" name="website" value="<%= item ? item.website : '' %>"></label>
+  </div>
+
+  <div class="form-row">
+    <label>簡介 (中文)<textarea name="bio_zh" rows="6"><%= item ? item.bio_zh : '' %></textarea></label>
+    <label>簡介 (English)<textarea name="bio_en" rows="6"><%= item ? item.bio_en : '' %></textarea></label>
+  </div>
+
+  <div class="form-row">
+    <label>大頭相<input type="file" name="photo" accept="image/*">
+      <% if (item && item.photo) { %><img class="thumb-preview" src="<%= item.photo %>"><input type="hidden" name="existing_photo" value="<%= item.photo %>"><% } %>
+    </label>
+    <label>品牌 Logo<input type="file" name="logo_image" accept="image/*">
+      <% if (item && item.logo_image) { %><img class="thumb-preview" src="<%= item.logo_image %>"><input type="hidden" name="existing_logo_image" value="<%= item.logo_image %>"><% } %>
+    </label>
+    <label>作品圖<input type="file" name="collection_image" accept="image/*">
+      <% if (item && item.collection_image) { %><img class="thumb-preview" src="<%= item.collection_image %>"><input type="hidden" name="existing_collection_image" value="<%= item.collection_image %>"><% } %>
+    </label>
+  </div>
+
+  <div class="form-row">
+    <label>排序<input type="number" name="sort_order" value="<%= item ? item.sort_order : 0 %>"></label>
+    <label class="checkbox"><input type="checkbox" name="is_published" <%= (!item || item.is_published) ? 'checked' : '' %>> 已發佈</label>
+  </div>
+
+  <button type="submit" class="btn">儲存</button>
+  <a href="/admin/gdtp" class="btn-secondary">取消</a>
+</form>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof pageTitle !== 'undefined' ? pageTitle : 'Festival Name' %></title>
+  <link rel="stylesheet" href="/css/site.css">
+  <% if (theme.theme_google_font_url) { %>
+    <link rel="stylesheet" href="<%= theme.theme_google_font_url %>">
+  <% } %>
+  <style>
+    :root {
+      --color-bg: <%= theme.theme_bg_color %>;
+      --color-text: <%= theme.theme_text_color %>;
+      --color-accent: <%= theme.theme_primary_color %>;
+    }
+    body { font-family: <%- theme.theme_font_family %>; }
+  </style>
+  <% if (theme.theme_custom_css) { %>
+    <style><%- theme.theme_custom_css %></style>
+  <% } %>
+</head>
+<body>
+  <header class="site-header">
+    <a class="logo" href="/<%= lang %>">
+      <img src="<%= theme.theme_logo %>" alt="logo">
+    </a>
+    <nav class="main-nav">
+      <a href="/<%= lang %>/about"><%= lang === 'zh' ? '關於我們' : 'About' %></a>
+      <a href="/<%= lang %>/news"><%= lang === 'zh' ? '最新消息' : 'News' %></a>
+      <a href="/<%= lang %>/programmes"><%= lang === 'zh' ? '活動資訊' : 'Programmes' %></a>
+      <a href="/<%= lang %>/gdtp"><%= lang === 'zh' ? 'GDTP' : 'GDTP' %></a>
+      <a href="/<%= lang %>/press"><%= lang === 'zh' ? '媒體報導' : 'Press' %></a>
+      <a href="/<%= lang %>/contact"><%= lang === 'zh' ? '聯絡我們' : 'Contact' %></a>
+    </nav>
+    <div class="lang-switch">
+      <a href="/en<%= typeof currentPathTail !== 'undefined' ? currentPathTail : '' %>">EN</a>
+      <a href="/zh<%= typeof currentPathTail !== 'undefined' ? currentPathTail : '' %>">繁</a>
+    </div>
+  </header>
+  <main>

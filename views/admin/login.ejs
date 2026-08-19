@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>後台登入</title>
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body class="login-page">
+  <form class="login-form" method="POST" action="/admin/login">
+    <h1>後台登入</h1>
+    <% if (error) { %><p class="error"><%= error %></p><% } %>
+    <label>用戶名<input type="text" name="username" required></label>
+    <label>密碼<input type="password" name="password" required></label>
+    <button type="submit">登入</button>
+  </form>
+</body>
+</html>
