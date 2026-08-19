@@ -25,6 +25,14 @@
     </div>
   </header>
 
+  <!-- Resumable jobs banner -->
+  <section class="resume-banner" id="resumeBanner" hidden>
+    <div class="resume-banner-inner">
+      <p class="resume-banner-title">有未完成嘅搬運工作</p>
+      <div id="resumeList" class="resume-list"></div>
+    </div>
+  </section>
+
   <div class="layout">
 
     <!-- Step rail -->
@@ -88,7 +96,20 @@
       <section class="step" id="step3" data-active="false">
         <p class="eyebrow">STEP 03 / 04</p>
         <h1>目標位置</h1>
-        <p class="lede">揀已連結帳戶入面邊個資料夾作為存放位置。輸入 <span class="mono">root</span> 代表 My Drive 最頂層。</p>
+
+        <label class="field-label">搬運模式</label>
+        <div class="mode-toggle" id="modeToggle">
+          <button type="button" class="mode-option" data-mode="copy" aria-pressed="true">
+            <span class="mode-option-title">完整複製</span>
+            <span class="mode-option-desc">每次喺目標位置建立新資料夾，適合一次性搬遷</span>
+          </button>
+          <button type="button" class="mode-option" data-mode="sync" aria-pressed="false">
+            <span class="mode-option-title">同步更新</span>
+            <span class="mode-option-desc">合併落現有資料夾，只複製新增/覆寫已變更嘅檔案</span>
+          </button>
+        </div>
+
+        <p class="lede" id="destLede">揀已連結帳戶入面邊個資料夾作為存放位置。輸入 <span class="mono">root</span> 代表 My Drive 最頂層。</p>
 
         <label class="field-label" for="destInput">目標資料夾連結 / ID</label>
         <div class="input-row">
@@ -98,8 +119,14 @@
         <div class="resolved" id="destResolved" hidden></div>
         <div class="error-msg" id="destError" hidden></div>
 
-        <label class="field-label" for="newNameInput">新資料夾名稱（可選）</label>
-        <input type="text" id="newNameInput" class="mono" placeholder="留空就用返原本個名" />
+        <div id="newNameField">
+          <label class="field-label" for="newNameInput">新資料夾名稱（可選）</label>
+          <input type="text" id="newNameInput" class="mono" placeholder="留空就用返原本個名" />
+        </div>
+
+        <div class="sync-note" id="syncNote" hidden>
+          同步更新會直接將上面呢個資料夾當做目的地（唔會再包多一層新資料夾）。目的地已有嘅同名檔案，只有嚟源修改時間較新先會覆寫；目的地獨有、來源冇嘅檔案唔會被刪除。
+        </div>
 
         <div class="step-actions">
           <button class="btn btn-ghost" data-back="2">← 上一步</button>
@@ -113,6 +140,10 @@
         <h1>執行搬運</h1>
 
         <div class="summary-card" id="summaryCard">
+          <div class="summary-row">
+            <span class="summary-key">模式</span>
+            <span class="summary-val mono" id="summaryMode">—</span>
+          </div>
           <div class="summary-row">
             <span class="summary-key">來源</span>
             <span class="summary-val mono" id="summarySource">—</span>
@@ -144,6 +175,14 @@
               <div class="stat">
                 <span class="stat-num mono" id="statSkipped">0</span>
                 <span class="stat-label">略過</span>
+              </div>
+              <div class="stat">
+                <span class="stat-num mono" id="statUpdated">0</span>
+                <span class="stat-label">已更新</span>
+              </div>
+              <div class="stat">
+                <span class="stat-num mono" id="statUnchanged">0</span>
+                <span class="stat-label">已係最新</span>
               </div>
             </div>
             <div class="manifest-status" id="manifestStatus">

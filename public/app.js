@@ -4,6 +4,7 @@
     source: null, // { id, name }
     dest: null,   // { id, name }
     accountEmail: null,
+    mode: 'copy',
   };
 
   const el = (id) => document.getElementById(id);
@@ -39,6 +40,82 @@
       if (state.currentStep === 1) goToStep(2);
     }
     return data.authenticated;
+  }
+
+  // ---------- Resumable jobs ----------
+
+  const STATUS_LABEL = {
+    interrupted: '中斷咗',
+    error: '失敗咗',
+    running: '搬運中',
+    done: '已完成',
+    cancelled: '已取消',
+  };
+
+  async function loadResumableJobs() {
+    try {
+      const res = await fetch('/api/jobs');
+      if (!res.ok) return;
+      const { jobs } = await res.json();
+      const resumable = jobs.filter((j) => j.status === 'interrupted' || j.status === 'error');
+      renderResumeBanner(resumable);
+    } catch (err) {
+      // 靜默失敗，唔阻住主流程
+    }
+  }
+
+  function renderResumeBanner(jobsList) {
+    const banner = el('resumeBanner');
+    const list = el('resumeList');
+    if (!jobsList.length) {
+      banner.hidden = true;
+      list.innerHTML = '';
+      return;
+    }
+    banner.hidden = false;
+    list.innerHTML = '';
+    for (const j of jobsList) {
+      const row = document.createElement('div');
+      row.className = 'resume-item';
+      const name = j.new_root_name || j.source_folder_id;
+      const statusClass = j.status === 'error' ? 'status-error' : '';
+      const modeLabel = j.mode === 'sync' ? '同步' : '複製';
+      row.innerHTML = `
+        <div class="resume-item-info">
+          <span class="resume-item-name">[${modeLabel}] ${escapeHtml(name)}</span>
+          <span class="resume-item-meta ${statusClass}">${STATUS_LABEL[j.status] || j.status} · 已完成 ${j.folders_count} 個資料夾、${j.files_count} 個檔案${j.updated_count ? `、${j.updated_count} 個已更新` : ''}${j.error_message ? ' · ' + escapeHtml(j.error_message) : ''}</span>
+        </div>
+        <div class="resume-item-actions">
+          <button class="btn btn-primary btn-sm" data-resume-id="${j.id}">繼續搬運</button>
+        </div>
+      `;
+      list.appendChild(row);
+    }
+    list.querySelectorAll('[data-resume-id]').forEach((btn) => {
+      btn.addEventListener('click', () => resumeJob(btn.dataset.resumeId));
+    });
+  }
+
+  async function resumeJob(jobId) {
+    const res = await fetch(`/api/copy/resume/${jobId}`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || '繼續失敗');
+      return;
+    }
+    goToStep(4);
+    el('preRunActions').hidden = true;
+    el('resultCard').hidden = true;
+    el('manifest').hidden = false;
+    el('manifestBody').innerHTML = '';
+    el('statFolders').textContent = '0';
+    el('statFiles').textContent = '0';
+    el('statSkipped').textContent = '0';
+    el('statUpdated').textContent = '0';
+    el('statUnchanged').textContent = '0';
+    el('pulseDot').style.display = '';
+    el('manifestStatusText').textContent = '繼續搬運中…';
+    subscribeToJob(jobId);
   }
 
   el('logoutBtn').addEventListener('click', async () => {
@@ -110,6 +187,7 @@
   });
 
   el('toStep4Btn').addEventListener('click', () => {
+    el('summaryMode').textContent = state.mode === 'sync' ? '同步更新（覆寫已變更檔案）' : '完整複製（建立新資料夾）';
     el('summarySource').textContent = `${state.source.name}  (${state.source.id})`;
     el('summaryDest').textContent = `${state.dest.name}  (${state.dest.id})`;
     goToStep(4);
@@ -119,9 +197,26 @@
     btn.addEventListener('click', () => goToStep(Number(btn.dataset.back)));
   });
 
+  // ---------- Mode toggle ----------
+
+  document.querySelectorAll('#modeToggle .mode-option').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.mode = btn.dataset.mode;
+      document.querySelectorAll('#modeToggle .mode-option').forEach((b) => {
+        b.setAttribute('aria-pressed', String(b === btn));
+      });
+      const isSync = state.mode === 'sync';
+      el('newNameField').hidden = isSync;
+      el('syncNote').hidden = !isSync;
+      el('destLede').textContent = isSync
+        ? '揀一個已經存在嘅資料夾作為同步目的地——內容會直接落喺呢個資料夾入面，唔會另外包一層。'
+        : '揀已連結帳戶入面邊個資料夾作為存放位置。輸入 root 代表 My Drive 最頂層。';
+    });
+  });
+
   // ---------- Step 4: run copy ----------
 
-  const ICONS = { folder: '▸', file: '·', skip: '×', start: '▸', done: '✓', error: '!' };
+  const ICONS = { folder: '▸', file: '·', update: '↻', skip: '×', start: '▸', done: '✓', error: '!' };
 
   function appendLogRow(evt) {
     const body = el('manifestBody');
@@ -132,6 +227,7 @@
     let label = '';
     if (evt.type === 'folder') label = `${indent}${evt.name}/`;
     else if (evt.type === 'file') label = `${indent}${evt.name}`;
+    else if (evt.type === 'update') label = `${indent}${evt.name}（覆寫較新版本）`;
     else if (evt.type === 'skip') label = `${indent}${evt.name}（略過：${evt.reason}）`;
     else if (evt.type === 'start') label = `開始搬運 → ${evt.rootName}`;
     else if (evt.type === 'done') label = `全部完成`;
@@ -153,6 +249,8 @@
     el('statFolders').textContent = '0';
     el('statFiles').textContent = '0';
     el('statSkipped').textContent = '0';
+    el('statUpdated').textContent = '0';
+    el('statUnchanged').textContent = '0';
     el('pulseDot').style.display = '';
     el('manifestStatusText').textContent = '搬運中…';
 
@@ -163,6 +261,7 @@
         sourceFolderId: state.source.id,
         destParentId: state.dest.id,
         newName: el('newNameInput').value,
+        mode: state.mode,
       }),
     });
     const data = await res.json();
@@ -171,18 +270,43 @@
       appendLogRow({ type: 'error', ts: Date.now(), message: data.error || '未知錯誤' });
       return;
     }
+    subscribeToJob(data.jobId);
+  });
 
-    const evtSource = new EventSource(`/api/copy/stream/${data.jobId}`);
+  function updateStatEls(stats) {
+    if (!stats) return;
+    if (stats.folders !== undefined) el('statFolders').textContent = stats.folders;
+    if (stats.files !== undefined) el('statFiles').textContent = stats.files;
+    if (stats.skipped !== undefined) el('statSkipped').textContent = stats.skipped;
+    if (stats.updated !== undefined) el('statUpdated').textContent = stats.updated;
+    if (stats.unchanged !== undefined) el('statUnchanged').textContent = stats.unchanged;
+  }
+
+  function subscribeToJob(jobId) {
+    const evtSource = new EventSource(`/api/copy/stream/${jobId}`);
     evtSource.onmessage = (msg) => {
       const evt = JSON.parse(msg.data);
-      if (evt.type === 'folder' || evt.type === 'file' || evt.type === 'skip' || evt.type === 'start') {
+
+      if (evt.type === 'snapshot') {
+        updateStatEls(evt.stats);
+        return;
+      }
+
+      if (evt.type === 'start' && evt.resumed) {
+        appendLogRow({
+          type: 'folder',
+          ts: evt.ts,
+          depth: 0,
+          name: evt.prevStats
+            ? `繼續之前嘅工作（之前已完成 ${evt.prevStats.folders} 個資料夾、${evt.prevStats.files} 個檔案）…`
+            : `繼續同步…`,
+        });
+      } else if (evt.type === 'folder' || evt.type === 'file' || evt.type === 'update' || evt.type === 'skip' || (evt.type === 'start' && !evt.resumed)) {
         appendLogRow(evt);
       }
-      if (evt.stats) {
-        el('statFolders').textContent = evt.stats.folders;
-        el('statFiles').textContent = evt.stats.files;
-        el('statSkipped').textContent = evt.stats.skipped;
-      }
+
+      updateStatEls(evt.stats);
+
       if (evt.type === 'done') {
         appendLogRow(evt);
         el('pulseDot').style.display = 'none';
@@ -192,23 +316,30 @@
       } else if (evt.type === 'error') {
         appendLogRow(evt);
         el('pulseDot').style.display = 'none';
-        el('manifestStatusText').textContent = '失敗';
+        el('manifestStatusText').textContent = '失敗（可以喺頁面頂部「繼續搬運」再試）';
         evtSource.close();
         showResult(false, evt);
+      } else if (evt.type === 'cancelled') {
+        el('pulseDot').style.display = 'none';
+        el('manifestStatusText').textContent = '已取消';
+        evtSource.close();
       }
     };
     evtSource.onerror = () => {
-      // SSE 連線中斷（例如網路波動），保留現有 log，唔強行判定失敗
-      el('manifestStatusText').textContent = '連線中斷 — 檢查中…';
+      el('manifestStatusText').textContent = '連線中斷 — 搬運喺伺服器繼續進行，重新整理頁面可以再睇返進度';
     };
-  });
+  }
 
   function showResult(success, evt) {
     const card = el('resultCard');
     card.hidden = false;
     if (success) {
       el('resultTitle').textContent = '搬運完成';
-      el('resultDetail').textContent = `已複製 ${evt.stats.folders} 個資料夾、${evt.stats.files} 個檔案${evt.stats.skipped ? `，略過 ${evt.stats.skipped} 個捷徑` : ''}。`;
+      const parts = [`${evt.stats.folders} 個資料夾`, `${evt.stats.files} 個新檔案`];
+      if (evt.stats.updated) parts.push(`${evt.stats.updated} 個已更新`);
+      if (evt.stats.unchanged) parts.push(`${evt.stats.unchanged} 個已係最新`);
+      if (evt.stats.skipped) parts.push(`略過 ${evt.stats.skipped} 個捷徑`);
+      el('resultDetail').textContent = `已處理：${parts.join('、')}。`;
       el('openDriveBtn').href = `https://drive.google.com/drive/folders/${evt.newRootId}`;
       el('openDriveBtn').hidden = false;
     } else {
@@ -228,5 +359,6 @@
   (async () => {
     const authed = await checkAuth();
     if (!authed) goToStep(1);
+    if (authed) await loadResumableJobs();
   })();
 })();
