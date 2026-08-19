@@ -155,6 +155,15 @@
           </div>
         </div>
 
+        <label class="scan-toggle">
+          <input type="checkbox" id="scanSizeToggle" checked />
+          <span class="scan-toggle-box" aria-hidden="true"></span>
+          <span class="scan-toggle-text">
+            <span class="scan-toggle-title">掃描總大小</span>
+            <span class="scan-toggle-desc">開始前先計算總數同總大小，之後會顯示進度百分比、即時速度、預計完成時間（大型資料夾會多一段前置掃描時間）。停用嘅話會直接開始複製，唔會有進度/速度資訊，只有逐項 log。</span>
+          </span>
+        </label>
+
         <div class="step-actions" id="preRunActions">
           <button class="btn btn-ghost" data-back="3">← 上一步</button>
           <button class="btn btn-primary" id="startCopyBtn">開始搬運</button>

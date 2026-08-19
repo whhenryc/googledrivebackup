@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   updated_count INTEGER NOT NULL DEFAULT 0,
   unchanged_count INTEGER NOT NULL DEFAULT 0,
   scan_status TEXT NOT NULL DEFAULT 'pending', -- pending | scanning | done
+  scan_enabled INTEGER NOT NULL DEFAULT 1,
   total_folders INTEGER NOT NULL DEFAULT 0,
   total_files INTEGER NOT NULL DEFAULT 0,
   total_bytes INTEGER NOT NULL DEFAULT 0,
@@ -82,15 +83,16 @@ ensureColumn('jobs', 'total_folders', `INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('jobs', 'total_files', `INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('jobs', 'total_bytes', `INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('jobs', 'bytes_done', `INTEGER NOT NULL DEFAULT 0`);
+ensureColumn('jobs', 'scan_enabled', `INTEGER NOT NULL DEFAULT 1`);
 
 // ---------- Job rows ----------
 
-function createJob({ id, sourceFolderId, destParentId, newName, mode, refreshToken, accountEmail }) {
+function createJob({ id, sourceFolderId, destParentId, newName, mode, refreshToken, accountEmail, scanEnabled }) {
   const now = Date.now();
   db.prepare(
-    `INSERT INTO jobs (id, source_folder_id, dest_parent_id, new_name, mode, status, refresh_token, account_email, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 'running', ?, ?, ?, ?)`
-  ).run(id, sourceFolderId, destParentId, newName || null, mode || 'copy', refreshToken || null, accountEmail || null, now, now);
+    `INSERT INTO jobs (id, source_folder_id, dest_parent_id, new_name, mode, status, refresh_token, account_email, scan_enabled, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?)`
+  ).run(id, sourceFolderId, destParentId, newName || null, mode || 'copy', refreshToken || null, accountEmail || null, scanEnabled === false ? 0 : 1, now, now);
 }
 
 function getJob(id) {

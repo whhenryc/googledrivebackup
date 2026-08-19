@@ -1,125 +1,132 @@
-# 活動網站骨架 (雙語 EN/繁 + 後台 CMS)
+# Drive Transfer — Google Drive 資料夾搬運工具（Web UI）
 
-跟原網站（香港牛仔節）架構仿製嘅骨架，設計可以自由換，資料結構已經對應原站嘅內容分類。
+4 步驟嘅 web wizard：連結帳戶 → 揀來源資料夾 → 揀目標位置 → 執行搬運（即時進度）。
 
-## 技術棧
-- Node.js + Express
-- SQLite (better-sqlite3)
-- EJS 樣板（server-rendered）
-- express-session + connect-sqlite3（後台登入 session）
-- multer（圖片/PDF上傳）
+**原理**：全程用 Google Drive API 嘅 `files.copy`，喺 Google 伺服器內部直接複製檔案。無論係呢個 app 所在嘅主機，定係使用者部電腦，都唔會經手任何檔案內容——只有 API 指令來回。
 
-## 目錄結構
-```
-├── server.js              # 主入口
-├── db/
-│   ├── schema.sql          # 資料庫結構
-│   ├── database.js         # DB 連接 + 自動建表
-│   └── seed.js             # 建立第一個後台帳號 + 示範資料
-├── middleware/
-│   ├── auth.js              # 後台登入驗證
-│   └── upload.js            # 圖片上傳設定
-├── routes/
-│   ├── public.js            # 前台頁面路由
-│   ├── adminAuth.js         # 後台登入/登出
-│   └── admin.js              # 後台 CRUD
-├── views/
-│   ├── public/               # 前台樣板
-│   └── admin/                 # 後台樣板
-└── public/
-    ├── css/                    # 樣式（呢度換設計）
-    ├── images/                 # 靜態圖 (logo等)
-    └── uploads/                 # 後台上傳嘅圖/PDF
-```
+只需要授權「接收檔案嗰個帳戶（B）」一次；來源帳戶（A）只需要將資料夾分享畀 B。
 
-## 內容分類對應
+**斷點續傳**：每複製一個資料夾/檔案都即時記落 SQLite。如果搬運中途中斷（伺服器重啟、網路斷線等），重新打開頁面會見到「有未完成嘅搬運工作」，撳「繼續搬運」就會由中斷嗰度接住做，唔會重複複製。
 
-| Content Type | 說明 |
-|---|---|
-| `news` | 最新消息，可連內部詳情頁或外部連結 |
-| `programmes` | 活動資訊，支援 parent_id 巢狀（例如CENTRESTAGE底下有Showcase/Workshops） |
-| `gdtp_designers` | GDTP設計師 profile |
-| `press` | 媒體報導 |
-| `publications` | 刊物/Lookbook (PDF) |
-| `page_blocks` | About / Contact 等靜態頁嘅內容區塊，可自由增加 block |
+---
 
-## 本機開發
+## 1. 建立 Google Cloud OAuth 憑證
+
+1. 去 [Google Cloud Console](https://console.cloud.google.com/) 開一個新專案
+2. 「API 和服務」→「已啟用的 API 和服務」→ 啟用 **Google Drive API**
+3. 「API 和服務」→「OAuth 同意畫面」：
+   - 使用者類型選 **外部（External）**
+   - 狀態設做「測試中（Testing）」就夠，唔使送審
+   - 「測試使用者」加入你想用嚟接收檔案嗰個 Google 帳戶 email
+4. 「憑證」→「建立憑證」→「OAuth 用戶端 ID」：
+   - 應用程式類型：**網頁應用程式（Web application）**
+   - 已授權的重新導向 URI：
+     - 本地開發：`http://localhost:3000/auth/google/callback`
+     - Railway 部署後：`https://你的網域/auth/google/callback`（部署完攞到網域先加返呢條，之後重新部署一次）
+   - 建立後記低 **用戶端 ID** 同 **用戶端密鑰**
+
+---
+
+## 2. 本地執行
 
 ```bash
 npm install
-cp .env.example .env      # 記得改 SESSION_SECRET
-npm run seed               # 建立第一個後台帳號 (預設 admin / changeme123)
+cp .env.example .env
+# 編輯 .env，填返 GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
 npm start
 ```
 
-- 前台: http://localhost:3000/zh
-- 後台: http://localhost:3000/admin
+打開 `http://localhost:3000`，跟住 4 個步驟做。
 
-## 部署上 Railway（跟你標準流程）
+---
 
-1. Push 呢個 repo 上 GitHub
-2. Railway 開新 project → Deploy from GitHub repo
-3. 加環境變數：`SESSION_SECRET`、`SEED_ADMIN_USER`、`SEED_ADMIN_PASS`
-4. **重要**：SQLite 檔案需要持久化，Railway 要幫 Volume mount 去 **`/app/data`**（Settings → Volumes → Mount Path 填 `/app/data`）
-   ⚠️ **千祈唔可以掛去 `/app/db`**！`db/` 資料夾入面裝住嘅係源碼（`database.js`、`schema.sql`、`seed.js`），如果Volume掛喺嗰度，會將啲源碼頂替走，導致 `Cannot find module '../db/database'` 呢類錯誤。持久化資料同源碼一定要分開資料夾。
-5. Deploy 之後，喺 Railway 嘅 Shell（或者本機連線）一次性跑 `npm run seed` 建立管理員帳號
-6. 之後每次 push 去 GitHub 就自動重新部署，`data/` 入面嘅內容唔會受影響
+## 3. 部署到 Railway
 
-## Section底圖 + Slider輪播 (仿原站NEWS/Programmes版式)
+同你平時工作流程一樣（GitHub → Railway）：
 
-睇過原網站實際screenshot後，發現版面係**深色底**同**白色底**兩種section交替，每種section內文字色、按鈕位置都唔同：
+1. 呢個資料夾 push 上一個新嘅 GitHub repo（`.env` 已經喺 `.gitignore`，唔會上到 GitHub，密鑰安全）
+2. Railway → New Project → Deploy from GitHub repo → 揀呢個 repo
+3. Railway 會自動偵測 Node.js，用 `npm start` 啟動（`package.json` 已經設定好）
+4. Settings → Variables，加入：
+   - `GOOGLE_CLIENT_ID`
+   - `GOOGLE_CLIENT_SECRET`
+   - `GOOGLE_REDIRECT_URI`（用 Railway 分配到嘅網域，例如 `https://drive-transfer.up.railway.app/auth/google/callback`）
+   - `SESSION_SECRET`（隨機長字串）
+5. 部署完成攞到正式網域之後，返去 Google Cloud Console 個 OAuth 憑證，將呢個網域嘅 callback URI 加入「已授權的重新導向 URI」
+6. 重新部署一次（或者 Railway 通常會自動重啟）即可使用
 
-| Section | 樣式 | 底圖Block Key |
-|---|---|---|
-| 最新消息 News | 深色底+白字+slider | `bg_news` |
-| 活動資訊 Programmes | **白/淺色底**+navy字+日期icon+slider | `bg_programmes` |
-| 刊物 Publications | 深色底，每本書獨立「READ NOW »」按鈕 | `bg_publications` |
-| GDTP | 白底、置中標題、相片一排、MORE喺段落下面 | `bg_gdtp`（未用到，預留） |
-| 關於我們 About Us | 深色底、置中標題+簡介 | `bg_about` |
-| 媒體報導 Media Coverages | 白/淺色底、標題靠左、MORE置中喺grid下面 | (用返press的card-grid，冇底圖slot) |
-| 聯絡我們 Contact Us | 深色底、雙欄置中排版 | `bg_contact` |
+### ⚠️ 一定要加 Railway Volume（否則斷點續傳形同虛設）
 
-底圖一律去 `/admin/pages/home` 新增block，Block Key填返上表對應嗰個就得，冇上傳都唔會爛版（深色底變返純色、淺色底變返白底）。
+Railway 個容器預設檔案系統係**暫存**嘅——每次重新部署都會清空，SQLite 檔案（`data/jobs.db`）都會跟住冇咗。要令斷點續傳喺重新部署後仍然有效，一定要掛一個 **Volume**：
 
-**GDTP首頁摘要段落**：去 `/admin/pages/gdtp`，新增block，Block Key填 `intro`，填內容就會顯示喺首頁GDTP相片下面嗰段簡介文字。
+1. Railway → 你個 service → **Settings** → **Volumes** → **Add Volume**
+2. Mount path 填 `/data`
+3. 加返一個環境變數：`DB_PATH=/data/jobs.db`
+4. Redeploy 一次
 
-Slider輪播：多過一條資料就會出現左右箭嘴，一次顯示一張(圖+標題+摘要+VIEW連結)，純CSS scroll-snap + 少量vanilla JS(`public/js/site.js`)，冇用任何外部library。
+如果唔加 Volume，工具本身照樣可以用，只不過「斷點續傳」淨係喺同一個容器生命週期內有效（例如程式短暫出錯自動保留進度），一旦 Railway 重新部署就會連 SQLite 一齊清空，跌返做要由頭嚟過。
 
-## 如果想同原網站design完全一致
+---
 
-Theme頁（顏色/字體/logo/自訂CSS）+ 首頁Hero圖呢兩樣加埋，已經涵蓋大部分設計元素。要完全對齊，跟住呢個流程：
+## 使用流程
 
-1. **攞返原網站嘅實際色碼/字體**：開原網站，F12開發者工具 → Elements → 揀中你想仿製嘅文字/按鈕 → 睇Computed嗰個tab，會見到實際嘅 `color`、`font-family`、`font-size` 數值。將呢啲數值填入 `/admin/theme`。
-2. **上傳Hero大圖**：去 `/admin/pages/home`，新增一個block，Block Key填 `hero`，上傳張KV大圖（例如原站嗰張"DENIM ARTISTRY"圖），首頁會自動變成全版闊嘅hero banner，冇上傳就fallback返做文字標題。
-3. **上傳返啲內容圖**：News/Programmes/GDTP依家啲card係空白，係因為未上傳封面圖，去返對應嘅後台分類逐個補返cover image。
-4. **細節排版微調**：如果想要更貼近原站嘅間距、卡片陰影、hover效果等，用 `/admin/theme` 個「自訂CSS」欄，直接寫CSS覆蓋（例如 `.card { box-shadow: ...; }`），唔使改code。
-5. **結構性改動**（例如完全唔同嘅grid排位、新增原站冇嘅section）就要直接改 `views/public/*.ejs` 同 `public/css/site.css`，呢層Theme頁做唔到，要搵我幫手改code。
+1. **連結帳戶** — 用接收檔案嗰個 Google 帳戶（B）登入授權
+2. **來源資料夾** — 貼上資料夾連結或 ID（記得先喺 A 帳戶分享畀 B，Viewer 已足夠，並確認冇開啟「限制下載/複製」）
+3. **目標位置** — 揀模式，再貼上 B 帳戶入面想存放嘅資料夾：
+   - **完整複製**：每次都喺目標位置建立一個新資料夾（可選改名），適合一次性搬遷
+   - **同步更新**：直接將貼上嘅資料夾當做同步目的地（唔會再包多一層），目的地已有嘅同名檔案只有嚟源修改時間較新先會覆寫，目的地獨有嘅檔案唔會被刪除
+4. **執行搬運** — 按「開始搬運」，會先快速掃描一次來源資料夾（攞總數同總大小），跟住開始真正複製，右邊會顯示進度百分比、即時速度、預計完成時間，同埋逐項嘅資料夾/檔案 log，完成後有連結直接打開新資料夾
 
-## 網站設計 (後台可換設計)
+## 速度同預計完成時間點計出嚟
 
-後台加咗一個「🎨 網站設計」頁（`/admin/theme`），可以喺唔使改code、唔使重新部署嘅情況下即時更換：
-- 主色調 / 背景色 / 文字色（`--color-accent` / `--color-bg` / `--color-text` 三個CSS變數，`public/css/site.css`全部card/button/link都跟住呢三個變數）
-- 字體（可以填CSS font-family，配合Google Fonts連結使用）
-- Logo（上傳新圖直接換走）
-- 自訂CSS（進階：直接寫CSS覆蓋任何樣式，會加喺 `</head>` 之前，優先級最高）
+- **掃描階段**：開始複製之前，會先行一次來源資料夾樹（只讀 metadata，唔會落地內容），攞到總資料夾數、總檔案數、總大小（bytes）。呢個階段本身都要少少時間（幾千個檔案通常幾秒到幾十秒），會有獨立嘅「掃描緊…」提示。
+- **掃描結果會快取**：掃描階段行過嘅每層 listing 結果會暫存喺記憶體，之後真正複製嗰陣直接攞嚟用，唔會對同一個資料夾再問 Google 多一次，慳返 API 用量。
+- **可以選擇唔掃描**：Step 4 有個「掃描總大小」開關，預設開啟。如果你唔需要進度/速度資訊，或者想盡快開始複製（跳過掃描嗰段前置時間），可以關咗佢——會直接開始複製，只有逐項 log，冇進度條/ETA。
+- **進度百分比**：已完成大小 ÷ 總大小。
+- **即時速度**：用最近 20 秒嘅樣本計算（唔係由頭到尾嘅平均值），所以速度上落會反映緊真實網路/API 狀況，唔會因為一開始快/慢而長期偏差。
+- **預計完成時間**：（總大小 − 已完成大小）÷ 即時速度，動態更新。
+- **限制**：Google Docs / Sheets / Slides 呢啲原生格式冇實際 byte size（Google 唔會回傳 `size` 呢個欄位），會當 0 位元組計。如果一個資料夾入面全部都係呢類原生格式，進度條同 ETA 會唔準（因為分母總大小接近 0），呢種情況建議睇返「已完成」個 log 逐項進度就夠。
+- 掃描結果（總量統計）會存落 SQLite，斷點續傳時唔使重新掃描一次（除非中斷嗰陣正正發生喺掃描階段）；但快取喺記憶體嘅逐層 listing 結果唔會跨重啟保留，resume 之後嘅複製階段會照舊直接問 Google（唔影響正確性，只係少咗快取帶嚟嘅慳位）。
+- 同步模式嘅 ETA 係假設「全部都要處理」計出嚟，實際上好多已經最新嘅檔案會即時跳過，所以真實完成時間通常會比 ETA 顯示嘅快。
 
-運作原理：呢啲設定存喺 `settings` 資料表，前台每次render都會讀取並輸出成inline `<style>` block（喺 `views/public/partials/header.ejs`），所以改完即刻全站生效。
+## 同步更新模式點解要留意
 
-如果之後想要更大幅度嘅設計改動（例如完全唔同嘅排版結構），就要直接改 `public/css/site.css` 同 `views/public/*.ejs` 嘅HTML結構，Theme頁淨係處理顏色/字體/logo/自訂CSS呢幾個層面。
+- **判斷依據**：目的地已有嘅檔案，會攞佢個 `modifiedTime` 同來源比較，來源較新先覆寫；一樣新或者來源較舊就會跳過（計入「已係最新」）。
+- **覆寫嘅實際做法**：Google Drive API 冇「將 A 檔案內容寫入現有 B 檔案」呢個伺服器端操作，`files.copy` 一定會產生新嘅 file ID。所以覆寫實際上係：將目的地舊檔案移入垃圾桶（可以喺 Google Drive 垃圾桶度復原），然後複製一份新嘅落去、保留檔名。**呢個代表覆寫之後 file ID 會變**，如果你有連結直接指向舊檔案（例如分享咗個直接連結畀人），呢條連結會跟住原有檔案一齊入咗垃圾桶。
+- **唔會處理刪除**：如果來源刪除咗某個檔案，目的地嗰邊唔會自動跟住刪除（單向、只加唔減，避免誤刪你目的地自己加落去嘅嘢）。
+- **名稱比對係精確配對**：同名先會判斷做「同一個項目」，改咗名嘅檔案會當做新檔案處理（唔會覆寫，會另外複製一份）。
+- 可以重複執行同一組來源/目的地，每次淨係處理有變更嘅部分，適合定期備份/同步用途。
 
-## 常見問題 Troubleshooting
+---
 
-**Railway部署時 `npm install` 失敗，報 `better-sqlite3` / `node-gyp` / `distutils` 錯誤**
-呢個係因為Railway預設用最新Node版本（例如24），`better-sqlite3` 呢類native套件未有對應嘅prebuilt binary，逼佢喺build時編譯，而編譯用嘅python環境又冇`distutils`，於是連環爆錯。
-已經喺呢個project加咗 `package.json` 嘅 `engines` 欄位 + `.nvmrc` + `nixpacks.toml`，鎖定用 **Node 20 LTS**（呢個版本better-sqlite3一定有現成binary，唔使編譯）。如果Railway之後仲係用緊舊版cache，去 Railway → Settings → 清緩存重新部署一次，或者手動喺Railway嘅 Variables 加 `NIXPACKS_NODE_VERSION=20`。
+## 大量資料（例如 500GB）要留意嘅事
 
-## 下一步要做
+- **搬運本身冇大小/時間上限**——`files.copy` 係伺服器端操作，唔受你網路頻寬限制。
+- **目標帳戶儲存空間**要夠（Google Docs/Sheets/Slides 唔計入容量，其他檔案類型會實際佔用目標帳戶嘅儲存額度）。
+- **Drive API 配額**：檔案量極多（例如幾萬個）有機會撞到 Google 嘅每分鐘/每日配額，程式已內建指數退避重試（429/500/503），撞到會自動放慢但唔會死。
+- **斷點續傳**已經處理咗中途中斷嘅風險——見上面「⚠️ 一定要加 Railway Volume」。冇加 Volume 嘅話，重新部署就會令進度歸零。
+- 大量細檔案（例如幾萬張相）遠比少量大檔（例如幾百個影片）耗時，因為每個檔案都係獨立一次 API call。
 
-1. **設計置換**：`public/css/site.css` 換晒你套新設計嘅CSS，views/public 入面嘅HTML結構可以照用，主要改 class name同排版
-2. **Logo/圖片**：`public/images/` 放返個logo同其他固定圖
-3. **匯入現有內容**：可以寫個一次性 script 讀CSV/JSON然後insert入DB，或者直接喺後台一個個輸入
-4. **加返 SEO meta**（og:image, description等）— 而家骨架淨係得 title
-5. **考慮加 rich text editor**（例如 Quill/TinyMCE）畀後台內文欄位用，而家淨係plain textarea，內文可以打HTML tag
-6. **多語言擴充**：而家係 EN/繁雙語，如果之後要加簡體，schema同UI都要加多一組 `_scn` 欄位
+## 技術備註
 
-呢個skeleton嘅CRUD邏輯全部已經跑得通（新增/編輯/刪除/上傳圖），你可以直接 `npm install` 試吓後台點用。
+- Session 用 `express-session` 內建記憶體儲存，適合單一使用者/單一 instance 使用。
+- 搬運進度用 SQLite（`db.js`）逐項記錄（已建立嘅資料夾、已複製嘅檔案、已略過嘅捷徑），中斷後憑呢啲紀錄判斷邊啲做咗，達到斷點續傳。
+- **`refresh_token` 會存喺 SQLite 入面**，用嚟喺伺服器重啟後唔使你重新登入都可以繼續個工作。呢個 token 等於長期存取你 Drive 嘅鎖匙，`data/` 資料夾已經加咗落 `.gitignore`，千祈唔好將個 db 檔案分享或者 commit 落 git。
+- 進度更新用 Server-Sent Events（SSE），單向 stream，唔使另外裝 WebSocket library。
+- Google Docs / Sheets / Slides 呢啲原生格式可以直接複製；捷徑（Shortcut）檔案會被跳過並喺記錄提示。
+- Shared Drive（共用雲端硬碟）都支援，程式已加 `supportsAllDrives`。
+
+## 檔案結構
+
+```
+drive-copy-web/
+├── server.js          # Express 後端：OAuth、resolve、複製工作引擎（可續傳）、SSE
+├── db.js               # SQLite 持久化：工作狀態、資料夾對照、已複製檔案紀錄
+├── public/
+│   ├── index.html      # wizard 畫面 + 未完成工作提示
+│   ├── style.css        # 視覺設計
+│   └── app.js            # 前端邏輯
+├── package.json
+├── .env.example
+└── .gitignore
+```

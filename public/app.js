@@ -325,6 +325,7 @@
         destParentId: state.dest.id,
         newName: el('newNameInput').value,
         mode: state.mode,
+        scanSize: el('scanSizeToggle').checked,
       }),
     });
     const data = await res.json();
