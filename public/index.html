@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Drive Transfer — 資料夾搬運</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+<div class="frame">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">⇄</span>
+      <span class="brand-text">DRIVE&nbsp;TRANSFER</span>
+    </div>
+    <div class="account" id="accountBadge" hidden>
+      <span class="account-dot"></span>
+      <span id="accountEmail" class="mono"></span>
+      <button id="logoutBtn" class="link-btn">登出</button>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <!-- Step rail -->
+    <nav class="rail" aria-label="步驟">
+      <div class="rail-line"></div>
+      <ol id="railList">
+        <li class="rail-step" data-step="1">
+          <span class="rail-num">01</span>
+          <span class="rail-label">連結帳戶</span>
+        </li>
+        <li class="rail-step" data-step="2">
+          <span class="rail-num">02</span>
+          <span class="rail-label">來源資料夾</span>
+        </li>
+        <li class="rail-step" data-step="3">
+          <span class="rail-num">03</span>
+          <span class="rail-label">目標位置</span>
+        </li>
+        <li class="rail-step" data-step="4">
+          <span class="rail-num">04</span>
+          <span class="rail-label">執行搬運</span>
+        </li>
+      </ol>
+    </nav>
+
+    <!-- Main panel -->
+    <main class="panel">
+
+      <!-- Step 1 -->
+      <section class="step" id="step1" data-active="true">
+        <p class="eyebrow">STEP 01 / 04</p>
+        <h1>連結目標 Google 帳戶</h1>
+        <p class="lede">呢個工具會用 Google Drive API 嘅 <code class="mono">files.copy</code>，喺 Google 伺服器內部直接複製檔案 — 資料唔會經過任何中間伺服器，亦唔會下載到本地。你只需要授權「接收檔案嗰個帳戶」一次。</p>
+        <a href="/auth/google" class="btn btn-primary" id="connectBtn">
+          <span>用 Google 帳戶連結</span>
+          <span aria-hidden="true">→</span>
+        </a>
+        <p class="hint">授權完成後會自動跳去下一步。</p>
+      </section>
+
+      <!-- Step 2 -->
+      <section class="step" id="step2" data-active="false">
+        <p class="eyebrow">STEP 02 / 04</p>
+        <h1>來源資料夾</h1>
+        <p class="lede">貼上資料夾連結，或者直接貼資料夾 ID。記得先喺來源帳戶將呢個資料夾分享畀 <span id="destEmailHint" class="mono">已連結嘅帳戶</span>（Viewer 已足夠）。</p>
+
+        <label class="field-label" for="sourceInput">資料夾連結 / ID</label>
+        <div class="input-row">
+          <input type="text" id="sourceInput" class="mono" placeholder="https://drive.google.com/drive/folders/..." />
+          <button class="btn btn-outline" id="resolveSourceBtn">驗證</button>
+        </div>
+        <div class="resolved" id="sourceResolved" hidden></div>
+        <div class="error-msg" id="sourceError" hidden></div>
+
+        <div class="step-actions">
+          <button class="btn btn-primary" id="toStep3Btn" disabled>下一步 →</button>
+        </div>
+      </section>
+
+      <!-- Step 3 -->
+      <section class="step" id="step3" data-active="false">
+        <p class="eyebrow">STEP 03 / 04</p>
+        <h1>目標位置</h1>
+        <p class="lede">揀已連結帳戶入面邊個資料夾作為存放位置。輸入 <span class="mono">root</span> 代表 My Drive 最頂層。</p>
+
+        <label class="field-label" for="destInput">目標資料夾連結 / ID</label>
+        <div class="input-row">
+          <input type="text" id="destInput" class="mono" placeholder="root 或者 https://drive.google.com/drive/folders/..." />
+          <button class="btn btn-outline" id="resolveDestBtn">驗證</button>
+        </div>
+        <div class="resolved" id="destResolved" hidden></div>
+        <div class="error-msg" id="destError" hidden></div>
+
+        <label class="field-label" for="newNameInput">新資料夾名稱（可選）</label>
+        <input type="text" id="newNameInput" class="mono" placeholder="留空就用返原本個名" />
+
+        <div class="step-actions">
+          <button class="btn btn-ghost" data-back="2">← 上一步</button>
+          <button class="btn btn-primary" id="toStep4Btn" disabled>下一步 →</button>
+        </div>
+      </section>
+
+      <!-- Step 4 -->
+      <section class="step" id="step4" data-active="false">
+        <p class="eyebrow">STEP 04 / 04</p>
+        <h1>執行搬運</h1>
+
+        <div class="summary-card" id="summaryCard">
+          <div class="summary-row">
+            <span class="summary-key">來源</span>
+            <span class="summary-val mono" id="summarySource">—</span>
+          </div>
+          <div class="summary-arrow" aria-hidden="true">↓</div>
+          <div class="summary-row">
+            <span class="summary-key">目標</span>
+            <span class="summary-val mono" id="summaryDest">—</span>
+          </div>
+        </div>
+
+        <div class="step-actions" id="preRunActions">
+          <button class="btn btn-ghost" data-back="3">← 上一步</button>
+          <button class="btn btn-primary" id="startCopyBtn">開始搬運</button>
+        </div>
+
+        <!-- Manifest / live log -->
+        <div class="manifest" id="manifest" hidden>
+          <div class="manifest-head">
+            <div class="manifest-stats">
+              <div class="stat">
+                <span class="stat-num mono" id="statFolders">0</span>
+                <span class="stat-label">資料夾</span>
+              </div>
+              <div class="stat">
+                <span class="stat-num mono" id="statFiles">0</span>
+                <span class="stat-label">檔案</span>
+              </div>
+              <div class="stat">
+                <span class="stat-num mono" id="statSkipped">0</span>
+                <span class="stat-label">略過</span>
+              </div>
+            </div>
+            <div class="manifest-status" id="manifestStatus">
+              <span class="pulse-dot" id="pulseDot"></span>
+              <span id="manifestStatusText">搬運中…</span>
+            </div>
+          </div>
+          <div class="manifest-body mono" id="manifestBody"></div>
+        </div>
+
+        <div class="result-card" id="resultCard" hidden>
+          <p class="result-title" id="resultTitle">完成</p>
+          <p class="result-detail" id="resultDetail"></p>
+          <div class="result-actions">
+            <a class="btn btn-primary" id="openDriveBtn" href="#" target="_blank" rel="noopener">喺 Drive 打開</a>
+            <button class="btn btn-outline" id="restartBtn">再搬運一次</button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
