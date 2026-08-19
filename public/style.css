@@ -463,6 +463,54 @@ input[type="text"]::placeholder { color: var(--muted); }
 .summary-val { color: var(--paper); text-align: right; overflow-wrap: anywhere; }
 .summary-arrow { text-align: center; color: var(--copper); margin: 10px 0; font-size: 15px; }
 
+/* ---------- Scan status ---------- */
+
+.scan-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 24px;
+  padding: 14px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--panel);
+  font-size: 13px;
+  color: var(--paper-dim);
+}
+
+/* ---------- Progress bar ---------- */
+
+.progress-wrap {
+  margin-top: 24px;
+}
+
+.progress-bar-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--hairline);
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--copper), #d9975a);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.progress-meta #progressPercent { color: var(--copper); font-weight: 600; }
+
 /* ---------- Manifest (signature element) ---------- */
 
 .manifest {

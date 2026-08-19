@@ -3,9 +3,7 @@
  *
  * 用途：每複製一個資料夾/檔案就即時記一筆，中斷後可以憑住呢啲紀錄
  * 判斷邊啲已經做咗，跳過重複，唔使由頭嚟過。
- *
- * 同步模式（sync）下，「已經做咗未」嘅判斷主要靠直接查詢目的地資料夾
- * （名稱 + modifiedTime），呢個 db 主要用嚟計統計、記 log 同支援斷點續傳。
+ * 亦都記低掃描階段攞到嘅總大小/總數，用嚟計進度、速度、ETA。
  *
  * 注意：refresh_token 存喺呢個資料庫入面（用嚟喺伺服器重啟後,
  * 唔使使用者重新登入都可以繼續個工作）。呢個 db 檔案要當敏感資料處理,
@@ -40,6 +38,11 @@ CREATE TABLE IF NOT EXISTS jobs (
   skipped_count INTEGER NOT NULL DEFAULT 0,
   updated_count INTEGER NOT NULL DEFAULT 0,
   unchanged_count INTEGER NOT NULL DEFAULT 0,
+  scan_status TEXT NOT NULL DEFAULT 'pending', -- pending | scanning | done
+  total_folders INTEGER NOT NULL DEFAULT 0,
+  total_files INTEGER NOT NULL DEFAULT 0,
+  total_bytes INTEGER NOT NULL DEFAULT 0,
+  bytes_done INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -74,6 +77,11 @@ function ensureColumn(table, column, definition) {
 ensureColumn('jobs', 'mode', `TEXT NOT NULL DEFAULT 'copy'`);
 ensureColumn('jobs', 'updated_count', `INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('jobs', 'unchanged_count', `INTEGER NOT NULL DEFAULT 0`);
+ensureColumn('jobs', 'scan_status', `TEXT NOT NULL DEFAULT 'pending'`);
+ensureColumn('jobs', 'total_folders', `INTEGER NOT NULL DEFAULT 0`);
+ensureColumn('jobs', 'total_files', `INTEGER NOT NULL DEFAULT 0`);
+ensureColumn('jobs', 'total_bytes', `INTEGER NOT NULL DEFAULT 0`);
+ensureColumn('jobs', 'bytes_done', `INTEGER NOT NULL DEFAULT 0`);
 
 // ---------- Job rows ----------
 
@@ -121,6 +129,21 @@ function touchJobStats(id, { folders = 0, files = 0, skipped = 0, updated = 0, u
   db.prepare(
     `UPDATE jobs SET folders_count = folders_count + ?, files_count = files_count + ?, skipped_count = skipped_count + ?, updated_count = updated_count + ?, unchanged_count = unchanged_count + ?, updated_at = ? WHERE id = ?`
   ).run(folders, files, skipped, updated, unchanged, Date.now(), id);
+}
+
+function setScanStatus(id, status) {
+  db.prepare(`UPDATE jobs SET scan_status = ?, updated_at = ? WHERE id = ?`).run(status, Date.now(), id);
+}
+
+function setJobTotals(id, { folders = 0, files = 0, bytes = 0 }) {
+  db.prepare(
+    `UPDATE jobs SET total_folders = ?, total_files = ?, total_bytes = ?, updated_at = ? WHERE id = ?`
+  ).run(folders, files, bytes, Date.now(), id);
+}
+
+function addBytesDone(id, bytes) {
+  if (!bytes) return;
+  db.prepare(`UPDATE jobs SET bytes_done = bytes_done + ?, updated_at = ? WHERE id = ?`).run(bytes, Date.now(), id);
 }
 
 function markOrphanedJobsInterrupted() {
@@ -178,6 +201,9 @@ module.exports = {
   setJobRoot,
   setJobStatus,
   touchJobStats,
+  setScanStatus,
+  setJobTotals,
+  addBytesDone,
   markOrphanedJobsInterrupted,
   getFolderMapping,
   addFolderMapping,

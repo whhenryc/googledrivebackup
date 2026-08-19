@@ -160,6 +160,25 @@
           <button class="btn btn-primary" id="startCopyBtn">開始搬運</button>
         </div>
 
+        <!-- Scan phase -->
+        <div class="scan-status" id="scanStatus" hidden>
+          <span class="pulse-dot" id="scanPulseDot"></span>
+          <span class="mono" id="scanStatusText">掃描緊來源資料夾…</span>
+        </div>
+
+        <!-- Progress bar + speed/ETA -->
+        <div class="progress-wrap" id="progressWrap" hidden>
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="progressBarFill"></div>
+          </div>
+          <div class="progress-meta">
+            <span class="mono" id="progressPercent">0%</span>
+            <span class="mono" id="progressSize">—</span>
+            <span class="mono" id="progressSpeed">—</span>
+            <span class="mono" id="progressEta">—</span>
+          </div>
+        </div>
+
         <!-- Manifest / live log -->
         <div class="manifest" id="manifest" hidden>
           <div class="manifest-head">

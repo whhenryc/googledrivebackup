@@ -1,15 +1,18 @@
 /**
  * server.js — Google Drive 資料夾伺服器端複製工具（Web UI 版）
- * 支援：斷點續傳、同步更新模式（Sync）
+ * 支援：斷點續傳、同步更新模式（Sync）、掃描預估總量 + 速度/ETA
  *
  * 全部複製都經 Google Drive API 的 files.copy 完成，
  * 資料喺 Google 伺服器內部搬移，唔會下載到呢個 app 所在嘅主機，
  * 更加唔會落地使用者部電腦。
  *
+ * 開始真正複製之前，會先做一次輕量掃描（只讀 metadata，唔會落地內容），
+ * 攞到來源資料夾嘅總資料夾數、總檔案數、總大小，畀前端計算進度、
+ * 即時速度同預計完成時間。
+ *
  * 「同步更新」模式：目的地已有同名檔案時，比較 modifiedTime，
  * 較新先覆寫（做法：將舊檔案移入垃圾桶，再用 files.copy 複製一份新嘅，
- * 並且保留來源嘅原始修改時間）。Drive API 冇「寫入現有檔案內容」呢個
- * 伺服器端操作，所以呢個係喺完全唔落地嘅前提下最貼近「覆寫」嘅做法。
+ * 並且保留來源嘅原始修改時間）。
  */
 
 require('dotenv').config();
@@ -162,7 +165,7 @@ app.post('/api/resolve', requireAuth, async (req, res) => {
 
 // ---------- Copy / Sync job engine ----------
 
-const activeJobs = new Map(); // jobId -> { emitter, cancelled }
+const activeJobs = new Map(); // jobId -> { emitter, cancelled, bytesDone }
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -190,7 +193,7 @@ async function listChildren(drive, folderId) {
     const res = await withRetry(() =>
       drive.files.list({
         q: `'${folderId}' in parents and trashed = false`,
-        fields: 'nextPageToken, files(id, name, mimeType, modifiedTime)',
+        fields: 'nextPageToken, files(id, name, mimeType, modifiedTime, size)',
         pageSize: 1000,
         pageToken,
         supportsAllDrives: true,
@@ -201,6 +204,10 @@ async function listChildren(drive, folderId) {
     pageToken = res.data.nextPageToken;
   } while (pageToken);
   return files;
+}
+
+function itemSize(item) {
+  return item.size ? parseInt(item.size, 10) : 0;
 }
 
 async function createFolder(drive, name, parentId) {
@@ -243,6 +250,35 @@ function emitEvent(active, type, payload) {
   active.emitter.emit('event', evt);
 }
 
+function addBytes(jobId, active, bytes) {
+  if (!bytes) return;
+  store.addBytesDone(jobId, bytes);
+  active.bytesDone += bytes;
+}
+
+// ---- 掃描階段：只讀 metadata，唔碰內容，攞返總資料夾/檔案數同總大小 ----
+async function scanFolderRecursive(jobId, active, drive, folderId, counters) {
+  if (active.cancelled) return;
+  const children = await listChildren(drive, folderId);
+
+  const now = Date.now();
+  for (const item of children) {
+    if (active.cancelled) return;
+    if (item.mimeType === FOLDER_MIME) {
+      counters.folders += 1;
+      await scanFolderRecursive(jobId, active, drive, item.id, counters);
+    } else if (item.mimeType !== SHORTCUT_MIME) {
+      counters.files += 1;
+      counters.bytes += itemSize(item);
+    }
+  }
+
+  if (Date.now() - counters.lastEmit > 400) {
+    counters.lastEmit = Date.now();
+    emitEvent(active, 'scan-progress', { folders: counters.folders, files: counters.files, bytes: counters.bytes });
+  }
+}
+
 // ---- 模式一：完整複製（每次喺目標位置建立新資料夾，唔理會目的地有咩） ----
 async function copyFolderRecursive(jobId, active, drive, sourceFolderId, destFolderId, depth) {
   if (active.cancelled) return;
@@ -258,21 +294,22 @@ async function copyFolderRecursive(jobId, active, drive, sourceFolderId, destFol
         destChildId = newFolder.id;
         store.addFolderMapping(jobId, item.id, destChildId);
         store.touchJobStats(jobId, { folders: 1 });
-        emitEvent(active, 'folder', { name: item.name, depth });
+        emitEvent(active, 'folder', { name: item.name, depth, bytesDone: active.bytesDone });
       }
       await copyFolderRecursive(jobId, active, drive, item.id, destChildId, depth + 1);
     } else if (item.mimeType === SHORTCUT_MIME) {
       if (!store.isSkipped(jobId, item.id)) {
         store.markSkipped(jobId, item.id);
         store.touchJobStats(jobId, { skipped: 1 });
-        emitEvent(active, 'skip', { name: item.name, depth, reason: 'shortcut' });
+        emitEvent(active, 'skip', { name: item.name, depth, reason: 'shortcut', bytesDone: active.bytesDone });
       }
     } else {
       if (!store.isFileCopied(jobId, item.id)) {
         await copyFile(drive, item.id, item.name, destFolderId, item.modifiedTime);
         store.markFileCopied(jobId, item.id);
         store.touchJobStats(jobId, { files: 1 });
-        emitEvent(active, 'file', { name: item.name, depth });
+        addBytes(jobId, active, itemSize(item));
+        emitEvent(active, 'file', { name: item.name, depth, size: itemSize(item), bytesDone: active.bytesDone });
       }
     }
   }
@@ -287,7 +324,6 @@ async function syncFolderRecursive(jobId, active, drive, sourceFolderId, destFol
     listChildren(drive, destFolderId),
   ]);
 
-  // 名稱 -> 項目（唔理會 trashed，listChildren 已經濾走）；如果同名有多個，揀第一個
   const destByName = new Map();
   for (const d of destChildren) {
     if (!destByName.has(d.name)) destByName.set(d.name, d);
@@ -305,7 +341,7 @@ async function syncFolderRecursive(jobId, active, drive, sourceFolderId, destFol
         const newFolder = await createFolder(drive, item.name, destFolderId);
         destChildId = newFolder.id;
         store.touchJobStats(jobId, { folders: 1 });
-        emitEvent(active, 'folder', { name: item.name, depth });
+        emitEvent(active, 'folder', { name: item.name, depth, bytesDone: active.bytesDone });
       }
       store.addFolderMapping(jobId, item.id, destChildId);
       await syncFolderRecursive(jobId, active, drive, item.id, destChildId, depth + 1);
@@ -313,14 +349,16 @@ async function syncFolderRecursive(jobId, active, drive, sourceFolderId, destFol
       if (!store.isSkipped(jobId, item.id)) {
         store.markSkipped(jobId, item.id);
         store.touchJobStats(jobId, { skipped: 1 });
-        emitEvent(active, 'skip', { name: item.name, depth, reason: 'shortcut' });
+        emitEvent(active, 'skip', { name: item.name, depth, reason: 'shortcut', bytesDone: active.bytesDone });
       }
     } else {
+      const size = itemSize(item);
       if (!existing) {
         await copyFile(drive, item.id, item.name, destFolderId, item.modifiedTime);
         store.markFileCopied(jobId, item.id);
         store.touchJobStats(jobId, { files: 1 });
-        emitEvent(active, 'file', { name: item.name, depth });
+        addBytes(jobId, active, size);
+        emitEvent(active, 'file', { name: item.name, depth, size, bytesDone: active.bytesDone });
       } else {
         const sourceTime = new Date(item.modifiedTime).getTime();
         const destTime = new Date(existing.modifiedTime).getTime();
@@ -329,10 +367,11 @@ async function syncFolderRecursive(jobId, active, drive, sourceFolderId, destFol
           await copyFile(drive, item.id, item.name, destFolderId, item.modifiedTime);
           store.markFileCopied(jobId, item.id);
           store.touchJobStats(jobId, { updated: 1 });
-          emitEvent(active, 'update', { name: item.name, depth });
+          addBytes(jobId, active, size);
+          emitEvent(active, 'update', { name: item.name, depth, size, bytesDone: active.bytesDone });
         } else {
           store.touchJobStats(jobId, { unchanged: 1 });
-          // 冇變更嘅項目唔逐個 log，避免洗版；只計入統計
+          addBytes(jobId, active, size);
         }
       }
     }
@@ -340,16 +379,43 @@ async function syncFolderRecursive(jobId, active, drive, sourceFolderId, destFol
 }
 
 async function runCopyJob(jobId, oauthClient) {
-  const active = { emitter: new EventEmitter(), cancelled: false };
+  const job0 = store.getJob(jobId);
+  const active = {
+    emitter: new EventEmitter(),
+    cancelled: false,
+    bytesDone: job0.bytes_done || 0,
+  };
   active.emitter.setMaxListeners(50);
   activeJobs.set(jobId, active);
 
   const drive = google.drive({ version: 'v3', auth: oauthClient });
-  const job = store.getJob(jobId);
 
   try {
+    // ---- 掃描階段（只做一次；resume 嘅時候如果之前已經掃描完就跳過）----
+    if (job0.scan_status !== 'done') {
+      store.setScanStatus(jobId, 'scanning');
+      emitEvent(active, 'scan-start', {});
+      const counters = { folders: 1, files: 0, bytes: 0, lastEmit: 0 };
+      await scanFolderRecursive(jobId, active, drive, job0.source_folder_id, counters);
+      store.setJobTotals(jobId, counters);
+      store.setScanStatus(jobId, 'done');
+      emitEvent(active, 'scan-done', { totalFolders: counters.folders, totalFiles: counters.files, totalBytes: counters.bytes });
+    } else {
+      emitEvent(active, 'scan-done', {
+        totalFolders: job0.total_folders,
+        totalFiles: job0.total_files,
+        totalBytes: job0.total_bytes,
+        cached: true,
+      });
+    }
+
+    if (active.cancelled) throw new Error('__cancelled__');
+
+    const job = store.getJob(jobId); // 攞返最新（掃描階段可能已更新）
+
     if (job.mode === 'sync') {
-      emitEvent(active, 'start', { rootName: job.new_root_name || '同步目的地', mode: 'sync', resumed: job.folders_count + job.files_count + job.updated_count > 0 });
+      const already = job.folders_count + job.files_count + job.updated_count;
+      emitEvent(active, 'start', { rootName: job.new_root_name || '同步目的地', mode: 'sync', resumed: already > 0 });
       await syncFolderRecursive(jobId, active, drive, job.source_folder_id, job.dest_parent_id, 0);
     } else {
       let newRootId = job.new_root_id;
@@ -367,42 +433,45 @@ async function runCopyJob(jobId, oauthClient) {
         store.setJobRoot(jobId, newRootId, newRootName);
         store.addFolderMapping(jobId, job.source_folder_id, newRootId);
         store.touchJobStats(jobId, { folders: 1 });
-        emitEvent(active, 'folder', { name: newRootName, depth: 0 });
+        emitEvent(active, 'folder', { name: newRootName, depth: 0, bytesDone: active.bytesDone });
       } else {
-        const prev = store.getJob(jobId);
         emitEvent(active, 'start', {
           rootName: newRootName,
           mode: 'copy',
           resumed: true,
-          prevStats: { folders: prev.folders_count, files: prev.files_count, skipped: prev.skipped_count },
+          prevStats: { folders: job.folders_count, files: job.files_count, skipped: job.skipped_count },
         });
       }
 
       await copyFolderRecursive(jobId, active, drive, job.source_folder_id, newRootId, 1);
     }
 
-    if (active.cancelled) {
+    if (active.cancelled) throw new Error('__cancelled__');
+
+    store.setJobStatus(jobId, 'done');
+    const finalJob = store.getJob(jobId);
+    emitEvent(active, 'done', {
+      stats: {
+        folders: finalJob.folders_count,
+        files: finalJob.files_count,
+        skipped: finalJob.skipped_count,
+        updated: finalJob.updated_count,
+        unchanged: finalJob.unchanged_count,
+      },
+      bytesDone: finalJob.bytes_done,
+      totalBytes: finalJob.total_bytes,
+      newRootId: finalJob.new_root_id || finalJob.dest_parent_id,
+      newRootName: finalJob.new_root_name || '同步目的地',
+    });
+  } catch (err) {
+    if (err.message === '__cancelled__' || active.cancelled) {
       store.setJobStatus(jobId, 'cancelled');
       emitEvent(active, 'cancelled', {});
     } else {
-      store.setJobStatus(jobId, 'done');
-      const finalJob = store.getJob(jobId);
-      emitEvent(active, 'done', {
-        stats: {
-          folders: finalJob.folders_count,
-          files: finalJob.files_count,
-          skipped: finalJob.skipped_count,
-          updated: finalJob.updated_count,
-          unchanged: finalJob.unchanged_count,
-        },
-        newRootId: finalJob.new_root_id || finalJob.dest_parent_id,
-        newRootName: finalJob.new_root_name || '同步目的地',
-      });
+      const message = err.message || String(err);
+      store.setJobStatus(jobId, 'error', message);
+      emitEvent(active, 'error', { message });
     }
-  } catch (err) {
-    const message = err.message || String(err);
-    store.setJobStatus(jobId, 'error', message);
-    emitEvent(active, 'error', { message });
   } finally {
     setTimeout(() => activeJobs.delete(jobId), 5 * 60 * 1000);
   }
@@ -478,7 +547,12 @@ app.get('/api/copy/stream/:jobId', (req, res) => {
     type: 'snapshot',
     ts: Date.now(),
     status: job.status,
+    scanStatus: job.scan_status,
     stats: { folders: job.folders_count, files: job.files_count, skipped: job.skipped_count, updated: job.updated_count, unchanged: job.unchanged_count },
+    totalBytes: job.total_bytes,
+    totalFolders: job.total_folders,
+    totalFiles: job.total_files,
+    bytesDone: job.bytes_done,
   })}\n\n`);
 
   const active = activeJobs.get(jobId);
@@ -488,6 +562,8 @@ app.get('/api/copy/stream/:jobId', (req, res) => {
         type: job.status === 'done' ? 'done' : job.status,
         ts: Date.now(),
         stats: { folders: job.folders_count, files: job.files_count, skipped: job.skipped_count, updated: job.updated_count, unchanged: job.unchanged_count },
+        bytesDone: job.bytes_done,
+        totalBytes: job.total_bytes,
         message: job.error_message,
         newRootId: job.new_root_id || job.dest_parent_id,
         newRootName: job.new_root_name || '同步目的地',

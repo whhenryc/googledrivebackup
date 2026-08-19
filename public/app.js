@@ -5,7 +5,69 @@
     dest: null,   // { id, name }
     accountEmail: null,
     mode: 'copy',
+    totalBytes: 0,
+    bytesSamples: [], // { t, bytes } — 用嚟計算即時速度
   };
+
+  function formatBytes(bytes) {
+    if (!bytes || bytes <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = 0;
+    let val = bytes;
+    while (val >= 1024 && i < units.length - 1) {
+      val /= 1024;
+      i++;
+    }
+    return `${val.toFixed(val >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
+  }
+
+  function formatDuration(seconds) {
+    if (!isFinite(seconds) || seconds < 0) return '—';
+    if (seconds < 60) return '少於 1 分鐘';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.round((seconds % 3600) / 60);
+    if (h > 0) return `約 ${h} 小時 ${m} 分鐘`;
+    return `約 ${m} 分鐘`;
+  }
+
+  function resetProgressState() {
+    state.totalBytes = 0;
+    state.bytesSamples = [];
+    el('progressWrap').hidden = true;
+    el('progressBarFill').style.width = '0%';
+    el('progressPercent').textContent = '0%';
+    el('progressSize').textContent = '—';
+    el('progressSpeed').textContent = '—';
+    el('progressEta').textContent = '—';
+    el('scanStatus').hidden = true;
+  }
+
+  function updateProgress(bytesDone) {
+    if (!state.totalBytes) return;
+    const pct = Math.min(100, (bytesDone / state.totalBytes) * 100);
+    el('progressBarFill').style.width = `${pct}%`;
+    el('progressPercent').textContent = `${pct.toFixed(1)}%`;
+    el('progressSize').textContent = `${formatBytes(bytesDone)} / ${formatBytes(state.totalBytes)}`;
+
+    const now = Date.now();
+    state.bytesSamples.push({ t: now, bytes: bytesDone });
+    // 只保留最近 20 秒嘅樣本嚟計即時速度，太舊嘅去晒佢
+    while (state.bytesSamples.length > 1 && now - state.bytesSamples[0].t > 20000) {
+      state.bytesSamples.shift();
+    }
+
+    if (state.bytesSamples.length >= 2) {
+      const oldest = state.bytesSamples[0];
+      const dt = (now - oldest.t) / 1000;
+      const db = bytesDone - oldest.bytes;
+      if (dt > 1 && db > 0) {
+        const speed = db / dt;
+        el('progressSpeed').textContent = `${formatBytes(speed)}/s`;
+        const remaining = state.totalBytes - bytesDone;
+        el('progressEta').textContent = remaining > 0 ? formatDuration(remaining / speed) : '即將完成';
+      }
+    }
+  }
 
   const el = (id) => document.getElementById(id);
 
@@ -115,6 +177,7 @@
     el('statUnchanged').textContent = '0';
     el('pulseDot').style.display = '';
     el('manifestStatusText').textContent = '繼續搬運中…';
+    resetProgressState();
     subscribeToJob(jobId);
   }
 
@@ -217,7 +280,6 @@
   // ---------- Step 4: run copy ----------
 
   const ICONS = { folder: '▸', file: '·', update: '↻', skip: '×', start: '▸', done: '✓', error: '!' };
-
   function appendLogRow(evt) {
     const body = el('manifestBody');
     const row = document.createElement('div');
@@ -253,6 +315,7 @@
     el('statUnchanged').textContent = '0';
     el('pulseDot').style.display = '';
     el('manifestStatusText').textContent = '搬運中…';
+    resetProgressState();
 
     const res = await fetch('/api/copy/start', {
       method: 'POST',
@@ -289,6 +352,41 @@
 
       if (evt.type === 'snapshot') {
         updateStatEls(evt.stats);
+        if (evt.totalBytes) {
+          state.totalBytes = evt.totalBytes;
+          el('progressWrap').hidden = false;
+          updateProgress(evt.bytesDone || 0);
+        }
+        if (evt.scanStatus === 'scanning') {
+          el('scanStatus').hidden = false;
+        }
+        return;
+      }
+
+      if (evt.type === 'scan-start') {
+        el('scanStatus').hidden = false;
+        el('scanStatusText').textContent = '掃描緊來源資料夾…';
+        return;
+      }
+
+      if (evt.type === 'scan-progress') {
+        el('scanStatusText').textContent = `掃描緊來源資料夾… 已發現 ${evt.folders} 個資料夾、${evt.files} 個檔案、${formatBytes(evt.bytes)}`;
+        return;
+      }
+
+      if (evt.type === 'scan-done') {
+        el('scanStatus').hidden = true;
+        state.totalBytes = evt.totalBytes || 0;
+        if (state.totalBytes > 0) {
+          el('progressWrap').hidden = false;
+          updateProgress(0);
+        }
+        appendLogRow({
+          type: 'folder',
+          ts: evt.ts,
+          depth: 0,
+          name: `${evt.cached ? '（沿用之前嘅掃描結果）' : '掃描完成'}：共 ${evt.totalFolders} 個資料夾、${evt.totalFiles} 個檔案、${formatBytes(evt.totalBytes)}`,
+        });
         return;
       }
 
@@ -306,11 +404,13 @@
       }
 
       updateStatEls(evt.stats);
+      if (evt.bytesDone !== undefined) updateProgress(evt.bytesDone);
 
       if (evt.type === 'done') {
         appendLogRow(evt);
         el('pulseDot').style.display = 'none';
         el('manifestStatusText').textContent = '已完成';
+        if (evt.bytesDone !== undefined) updateProgress(evt.bytesDone);
         evtSource.close();
         showResult(true, evt);
       } else if (evt.type === 'error') {
