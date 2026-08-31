@@ -51,11 +51,6 @@
     return saved === null ? true : saved === 'true';
   }
 
-  el('notifyToggle').checked = loadNotifyPref();
-  el('notifyToggle').addEventListener('change', () => {
-    localStorage.setItem(NOTIFY_PREF_KEY, String(el('notifyToggle').checked));
-  });
-
   async function ensureNotifyPermission() {
     if (!el('notifyToggle').checked) return;
     if (typeof Notification === 'undefined') return;
@@ -110,6 +105,11 @@
   }
 
   const el = (id) => document.getElementById(id);
+
+  el('notifyToggle').checked = loadNotifyPref();
+  el('notifyToggle').addEventListener('change', () => {
+    localStorage.setItem(NOTIFY_PREF_KEY, String(el('notifyToggle').checked));
+  });
 
   const railSteps = [...document.querySelectorAll('.rail-step')];
   const stepSections = {
