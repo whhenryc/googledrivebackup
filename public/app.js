@@ -40,6 +40,7 @@
     el('progressSpeed').textContent = '—';
     el('progressEta').textContent = '—';
     el('scanStatus').hidden = true;
+    el('concurrencyBadge').hidden = true;
   }
 
   // ---------- Desktop notifications ----------
@@ -450,6 +451,11 @@
 
       updateStatEls(evt.stats);
       if (evt.bytesDone !== undefined) updateProgress(evt.bytesDone);
+      if (evt.concurrent !== undefined) {
+        const badge = el('concurrencyBadge');
+        badge.hidden = false;
+        badge.textContent = `並行 ${evt.concurrent}/${evt.concurrencyMax}`;
+      }
 
       if (evt.type === 'done') {
         appendLogRow(evt);

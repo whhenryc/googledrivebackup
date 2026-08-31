@@ -613,6 +613,15 @@ input[type="text"]::placeholder { color: var(--muted); }
   color: var(--muted);
 }
 
+.concurrency-badge {
+  font-size: 10.5px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: var(--copper-soft);
+  color: var(--copper);
+  letter-spacing: 0.02em;
+}
+
 .pulse-dot {
   width: 7px;
   height: 7px;

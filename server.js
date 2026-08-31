@@ -185,12 +185,15 @@ function createLimiter(max) {
       (err) => { running--; reject(err); schedule(); }
     );
   }
-  return function run(fn) {
+  function run(fn) {
     return new Promise((resolve, reject) => {
       queue.push({ fn, resolve, reject });
       schedule();
     });
-  };
+  }
+  run.getActive = () => running; // 畀外面查而家實際有幾多條並行緊嘅請求，用嚟喺 UI 度顯示
+  run.max = max;
+  return run;
 }
 
 function sleep(ms) {
@@ -284,6 +287,12 @@ async function trashFile(drive, fileId) {
 
 function emitEvent(active, type, payload) {
   const evt = { type, ts: Date.now(), ...payload };
+  // 幫每個事件都附上而家嘅並行狀態，等前端可以直接顯示「並行緊幾多條」，
+  // 唔使靠肉眼睇 log 時間戳嚟間接判斷。
+  if (active.limiter && (type === 'file' || type === 'folder' || type === 'update')) {
+    evt.concurrent = active.limiter.getActive();
+    evt.concurrencyMax = active.limiter.max;
+  }
   active.emitter.emit('event', evt);
 }
 
