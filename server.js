@@ -167,6 +167,32 @@ app.post('/api/resolve', requireAuth, async (req, res) => {
 
 const activeJobs = new Map(); // jobId -> { emitter, cancelled, bytesDone }
 
+// Drive API 每次請求都有固定嘅網絡來回時間，逐個檔案排隊做會被呢個延遲拖住，
+// 尤其係大量細檔案嘅情況（每個 file.copy 嘅實際傳輸時間好短，但排隊等 round-trip 就好慢）。
+// 用一個共用嘅並行限制器，畀成個工作可以同一時間開幾條請求，攤薄呢個延遲，
+// 又唔會因為資料夾樹好深/好闊而令並行數量失控（無論邊一層都係用返同一個 limiter）。
+const DRIVE_CONCURRENCY = parseInt(process.env.DRIVE_CONCURRENCY, 10) || 8;
+
+function createLimiter(max) {
+  let running = 0;
+  const queue = [];
+  function schedule() {
+    if (running >= max || queue.length === 0) return;
+    running++;
+    const { fn, resolve, reject } = queue.shift();
+    fn().then(
+      (val) => { running--; resolve(val); schedule(); },
+      (err) => { running--; reject(err); schedule(); }
+    );
+  }
+  return function run(fn) {
+    return new Promise((resolve, reject) => {
+      queue.push({ fn, resolve, reject });
+      schedule();
+    });
+  };
+}
+
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -272,19 +298,21 @@ function addBytes(jobId, active, bytes) {
 // 唔使對同一個資料夾再行多一次 Drive API list call。
 async function scanFolderRecursive(jobId, active, drive, folderId, counters) {
   if (active.cancelled) return;
-  const children = await listChildren(drive, folderId);
+  const children = await active.limiter(() => listChildren(drive, folderId));
   active.childrenCache.set(folderId, children);
 
-  for (const item of children) {
-    if (active.cancelled) return;
-    if (item.mimeType === FOLDER_MIME) {
-      counters.folders += 1;
-      await scanFolderRecursive(jobId, active, drive, item.id, counters);
-    } else if (item.mimeType !== SHORTCUT_MIME) {
-      counters.files += 1;
-      counters.bytes += itemSize(item);
-    }
-  }
+  await Promise.all(
+    children.map(async (item) => {
+      if (active.cancelled) return;
+      if (item.mimeType === FOLDER_MIME) {
+        counters.folders += 1;
+        await scanFolderRecursive(jobId, active, drive, item.id, counters);
+      } else if (item.mimeType !== SHORTCUT_MIME) {
+        counters.files += 1;
+        counters.bytes += itemSize(item);
+      }
+    })
+  );
 
   if (Date.now() - counters.lastEmit > 400) {
     counters.lastEmit = Date.now();
@@ -295,37 +323,40 @@ async function scanFolderRecursive(jobId, active, drive, folderId, counters) {
 // ---- 模式一：完整複製（每次喺目標位置建立新資料夾，唔理會目的地有咩） ----
 async function copyFolderRecursive(jobId, active, drive, sourceFolderId, destFolderId, depth) {
   if (active.cancelled) return;
-  const children = takeCachedChildren(active, sourceFolderId) || (await listChildren(drive, sourceFolderId));
+  const children =
+    takeCachedChildren(active, sourceFolderId) || (await active.limiter(() => listChildren(drive, sourceFolderId)));
 
-  for (const item of children) {
-    if (active.cancelled) return;
+  await Promise.all(
+    children.map(async (item) => {
+      if (active.cancelled) return;
 
-    if (item.mimeType === FOLDER_MIME) {
-      let destChildId = store.getFolderMapping(jobId, item.id);
-      if (!destChildId) {
-        const newFolder = await createFolder(drive, item.name, destFolderId);
-        destChildId = newFolder.id;
-        store.addFolderMapping(jobId, item.id, destChildId);
-        store.touchJobStats(jobId, { folders: 1 });
-        emitEvent(active, 'folder', { name: item.name, depth, bytesDone: active.bytesDone });
+      if (item.mimeType === FOLDER_MIME) {
+        let destChildId = store.getFolderMapping(jobId, item.id);
+        if (!destChildId) {
+          const newFolder = await active.limiter(() => createFolder(drive, item.name, destFolderId));
+          destChildId = newFolder.id;
+          store.addFolderMapping(jobId, item.id, destChildId);
+          store.touchJobStats(jobId, { folders: 1 });
+          emitEvent(active, 'folder', { name: item.name, depth, bytesDone: active.bytesDone });
+        }
+        await copyFolderRecursive(jobId, active, drive, item.id, destChildId, depth + 1);
+      } else if (item.mimeType === SHORTCUT_MIME) {
+        if (!store.isSkipped(jobId, item.id)) {
+          store.markSkipped(jobId, item.id);
+          store.touchJobStats(jobId, { skipped: 1 });
+          emitEvent(active, 'skip', { name: item.name, depth, reason: 'shortcut', bytesDone: active.bytesDone });
+        }
+      } else {
+        if (!store.isFileCopied(jobId, item.id)) {
+          await active.limiter(() => copyFile(drive, item.id, item.name, destFolderId, item.modifiedTime));
+          store.markFileCopied(jobId, item.id);
+          store.touchJobStats(jobId, { files: 1 });
+          addBytes(jobId, active, itemSize(item));
+          emitEvent(active, 'file', { name: item.name, depth, size: itemSize(item), bytesDone: active.bytesDone });
+        }
       }
-      await copyFolderRecursive(jobId, active, drive, item.id, destChildId, depth + 1);
-    } else if (item.mimeType === SHORTCUT_MIME) {
-      if (!store.isSkipped(jobId, item.id)) {
-        store.markSkipped(jobId, item.id);
-        store.touchJobStats(jobId, { skipped: 1 });
-        emitEvent(active, 'skip', { name: item.name, depth, reason: 'shortcut', bytesDone: active.bytesDone });
-      }
-    } else {
-      if (!store.isFileCopied(jobId, item.id)) {
-        await copyFile(drive, item.id, item.name, destFolderId, item.modifiedTime);
-        store.markFileCopied(jobId, item.id);
-        store.touchJobStats(jobId, { files: 1 });
-        addBytes(jobId, active, itemSize(item));
-        emitEvent(active, 'file', { name: item.name, depth, size: itemSize(item), bytesDone: active.bytesDone });
-      }
-    }
-  }
+    })
+  );
 }
 
 // ---- 模式二：同步更新（目的地已有同名項目時，按 modifiedTime 判斷是否覆寫） ----
@@ -334,8 +365,8 @@ async function syncFolderRecursive(jobId, active, drive, sourceFolderId, destFol
 
   const cachedSource = takeCachedChildren(active, sourceFolderId);
   const [sourceChildren, destChildren] = await Promise.all([
-    cachedSource ? Promise.resolve(cachedSource) : listChildren(drive, sourceFolderId),
-    listChildren(drive, destFolderId),
+    cachedSource ? Promise.resolve(cachedSource) : active.limiter(() => listChildren(drive, sourceFolderId)),
+    active.limiter(() => listChildren(drive, destFolderId)),
   ]);
 
   const destByName = new Map();
@@ -343,53 +374,55 @@ async function syncFolderRecursive(jobId, active, drive, sourceFolderId, destFol
     if (!destByName.has(d.name)) destByName.set(d.name, d);
   }
 
-  for (const item of sourceChildren) {
-    if (active.cancelled) return;
-    const existing = destByName.get(item.name);
+  await Promise.all(
+    sourceChildren.map(async (item) => {
+      if (active.cancelled) return;
+      const existing = destByName.get(item.name);
 
-    if (item.mimeType === FOLDER_MIME) {
-      let destChildId;
-      if (existing && existing.mimeType === FOLDER_MIME) {
-        destChildId = existing.id;
-      } else {
-        const newFolder = await createFolder(drive, item.name, destFolderId);
-        destChildId = newFolder.id;
-        store.touchJobStats(jobId, { folders: 1 });
-        emitEvent(active, 'folder', { name: item.name, depth, bytesDone: active.bytesDone });
-      }
-      store.addFolderMapping(jobId, item.id, destChildId);
-      await syncFolderRecursive(jobId, active, drive, item.id, destChildId, depth + 1);
-    } else if (item.mimeType === SHORTCUT_MIME) {
-      if (!store.isSkipped(jobId, item.id)) {
-        store.markSkipped(jobId, item.id);
-        store.touchJobStats(jobId, { skipped: 1 });
-        emitEvent(active, 'skip', { name: item.name, depth, reason: 'shortcut', bytesDone: active.bytesDone });
-      }
-    } else {
-      const size = itemSize(item);
-      if (!existing) {
-        await copyFile(drive, item.id, item.name, destFolderId, item.modifiedTime);
-        store.markFileCopied(jobId, item.id);
-        store.touchJobStats(jobId, { files: 1 });
-        addBytes(jobId, active, size);
-        emitEvent(active, 'file', { name: item.name, depth, size, bytesDone: active.bytesDone });
-      } else {
-        const sourceTime = new Date(item.modifiedTime).getTime();
-        const destTime = new Date(existing.modifiedTime).getTime();
-        if (sourceTime > destTime) {
-          await trashFile(drive, existing.id);
-          await copyFile(drive, item.id, item.name, destFolderId, item.modifiedTime);
-          store.markFileCopied(jobId, item.id);
-          store.touchJobStats(jobId, { updated: 1 });
-          addBytes(jobId, active, size);
-          emitEvent(active, 'update', { name: item.name, depth, size, bytesDone: active.bytesDone });
+      if (item.mimeType === FOLDER_MIME) {
+        let destChildId;
+        if (existing && existing.mimeType === FOLDER_MIME) {
+          destChildId = existing.id;
         } else {
-          store.touchJobStats(jobId, { unchanged: 1 });
+          const newFolder = await active.limiter(() => createFolder(drive, item.name, destFolderId));
+          destChildId = newFolder.id;
+          store.touchJobStats(jobId, { folders: 1 });
+          emitEvent(active, 'folder', { name: item.name, depth, bytesDone: active.bytesDone });
+        }
+        store.addFolderMapping(jobId, item.id, destChildId);
+        await syncFolderRecursive(jobId, active, drive, item.id, destChildId, depth + 1);
+      } else if (item.mimeType === SHORTCUT_MIME) {
+        if (!store.isSkipped(jobId, item.id)) {
+          store.markSkipped(jobId, item.id);
+          store.touchJobStats(jobId, { skipped: 1 });
+          emitEvent(active, 'skip', { name: item.name, depth, reason: 'shortcut', bytesDone: active.bytesDone });
+        }
+      } else {
+        const size = itemSize(item);
+        if (!existing) {
+          await active.limiter(() => copyFile(drive, item.id, item.name, destFolderId, item.modifiedTime));
+          store.markFileCopied(jobId, item.id);
+          store.touchJobStats(jobId, { files: 1 });
           addBytes(jobId, active, size);
+          emitEvent(active, 'file', { name: item.name, depth, size, bytesDone: active.bytesDone });
+        } else {
+          const sourceTime = new Date(item.modifiedTime).getTime();
+          const destTime = new Date(existing.modifiedTime).getTime();
+          if (sourceTime > destTime) {
+            await active.limiter(() => trashFile(drive, existing.id));
+            await active.limiter(() => copyFile(drive, item.id, item.name, destFolderId, item.modifiedTime));
+            store.markFileCopied(jobId, item.id);
+            store.touchJobStats(jobId, { updated: 1 });
+            addBytes(jobId, active, size);
+            emitEvent(active, 'update', { name: item.name, depth, size, bytesDone: active.bytesDone });
+          } else {
+            store.touchJobStats(jobId, { unchanged: 1 });
+            addBytes(jobId, active, size);
+          }
         }
       }
-    }
-  }
+    })
+  );
 }
 
 async function runCopyJob(jobId, oauthClient) {
@@ -399,6 +432,7 @@ async function runCopyJob(jobId, oauthClient) {
     cancelled: false,
     bytesDone: job0.bytes_done || 0,
     childrenCache: new Map(),
+    limiter: createLimiter(DRIVE_CONCURRENCY),
   };
   active.emitter.setMaxListeners(50);
   activeJobs.set(jobId, active);
