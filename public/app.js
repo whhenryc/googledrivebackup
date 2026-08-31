@@ -42,6 +42,46 @@
     el('scanStatus').hidden = true;
   }
 
+  // ---------- Desktop notifications ----------
+
+  const NOTIFY_PREF_KEY = 'driveTransfer.notifyOnComplete';
+
+  function loadNotifyPref() {
+    const saved = localStorage.getItem(NOTIFY_PREF_KEY);
+    return saved === null ? true : saved === 'true';
+  }
+
+  el('notifyToggle').checked = loadNotifyPref();
+  el('notifyToggle').addEventListener('change', () => {
+    localStorage.setItem(NOTIFY_PREF_KEY, String(el('notifyToggle').checked));
+  });
+
+  async function ensureNotifyPermission() {
+    if (!el('notifyToggle').checked) return;
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission === 'default') {
+      try {
+        await Notification.requestPermission();
+      } catch (_) {
+        // 忽略，用戶拒絕或者瀏覽器唔支援都唔阻住主流程
+      }
+    }
+  }
+
+  function notifyCompletion(title, body) {
+    if (!el('notifyToggle').checked) return;
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    try {
+      const notification = new Notification(title, { body, icon: undefined });
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+      };
+    } catch (_) {
+      // 部分瀏覽器/環境唔支援都唔緊要，靜默忽略
+    }
+  }
+
   function updateProgress(bytesDone) {
     if (!state.totalBytes) return;
     const pct = Math.min(100, (bytesDone / state.totalBytes) * 100);
@@ -159,6 +199,8 @@
   }
 
   async function resumeJob(jobId) {
+    await ensureNotifyPermission();
+
     const res = await fetch(`/api/copy/resume/${jobId}`, { method: 'POST' });
     const data = await res.json();
     if (!res.ok) {
@@ -305,6 +347,8 @@
   }
 
   el('startCopyBtn').addEventListener('click', async () => {
+    await ensureNotifyPermission();
+
     el('preRunActions').hidden = true;
     el('manifest').hidden = false;
     el('manifestBody').innerHTML = '';
@@ -414,12 +458,15 @@
         if (evt.bytesDone !== undefined) updateProgress(evt.bytesDone);
         evtSource.close();
         showResult(true, evt);
+        const s = evt.stats || {};
+        notifyCompletion('搬運完成 ✓', `${s.folders || 0} 個資料夾、${s.files || 0} 個新檔案${s.updated ? `、${s.updated} 個已更新` : ''}`);
       } else if (evt.type === 'error') {
         appendLogRow(evt);
         el('pulseDot').style.display = 'none';
         el('manifestStatusText').textContent = '失敗（可以喺頁面頂部「繼續搬運」再試）';
         evtSource.close();
         showResult(false, evt);
+        notifyCompletion('搬運失敗 ✕', evt.message || '發生未知錯誤，回到頁面查看詳情');
       } else if (evt.type === 'cancelled') {
         el('pulseDot').style.display = 'none';
         el('manifestStatusText').textContent = '已取消';
