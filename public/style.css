@@ -105,7 +105,16 @@ code {
 
 .resume-item-meta .status-error { color: var(--err); }
 
+.resume-item-cooldown {
+  display: block;
+  font-size: 11.5px;
+  color: var(--err);
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+
 .resume-item-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.resume-item-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ---------- Topbar ---------- */
 

@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   total_files INTEGER NOT NULL DEFAULT 0,
   total_bytes INTEGER NOT NULL DEFAULT 0,
   bytes_done INTEGER NOT NULL DEFAULT 0,
+  rate_limited_until INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -90,6 +91,7 @@ ensureColumn('jobs', 'total_files', `INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('jobs', 'total_bytes', `INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('jobs', 'bytes_done', `INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('jobs', 'scan_enabled', `INTEGER NOT NULL DEFAULT 1`);
+ensureColumn('jobs', 'rate_limited_until', `INTEGER NOT NULL DEFAULT 0`);
 
 // ---------- Job rows ----------
 
@@ -161,6 +163,26 @@ function markOrphanedJobsInterrupted() {
   return info.changes;
 }
 
+// ---------- 防止同一帳戶開多個並行 job ----------
+
+function getRunningJobForAccount(accountEmail, excludeJobId) {
+  if (!accountEmail) return null;
+  if (excludeJobId) {
+    return db
+      .prepare(`SELECT * FROM jobs WHERE account_email = ? AND status = 'running' AND id != ? ORDER BY updated_at DESC LIMIT 1`)
+      .get(accountEmail, excludeJobId);
+  }
+  return db
+    .prepare(`SELECT * FROM jobs WHERE account_email = ? AND status = 'running' ORDER BY updated_at DESC LIMIT 1`)
+    .get(accountEmail);
+}
+
+// ---------- 撞到限流後嘅強制冷卻 ----------
+
+function setRateLimitedUntil(id, until) {
+  db.prepare(`UPDATE jobs SET rate_limited_until = ?, updated_at = ? WHERE id = ?`).run(until, Date.now(), id);
+}
+
 // ---------- Folder mapping (source folder id -> dest folder id) ----------
 
 function getFolderMapping(jobId, sourceFolderId) {
@@ -225,6 +247,8 @@ module.exports = {
   setJobTotals,
   addBytesDone,
   markOrphanedJobsInterrupted,
+  getRunningJobForAccount,
+  setRateLimitedUntil,
   getFolderMapping,
   addFolderMapping,
   isFileCopied,

@@ -183,13 +183,16 @@
       const name = j.new_root_name || j.source_folder_id;
       const statusClass = j.status === 'error' ? 'status-error' : '';
       const modeLabel = j.mode === 'sync' ? '同步' : '複製';
+      const cooldownUntil = j.rate_limited_until || 0;
+      const inCooldown = cooldownUntil > Date.now();
       row.innerHTML = `
         <div class="resume-item-info">
           <span class="resume-item-name">[${modeLabel}] ${escapeHtml(name)}</span>
           <span class="resume-item-meta ${statusClass}">${STATUS_LABEL[j.status] || j.status} · 已完成 ${j.folders_count} 個資料夾、${j.files_count} 個檔案${j.updated_count ? `、${j.updated_count} 個已更新` : ''}${j.error_message ? ' · ' + escapeHtml(j.error_message) : ''}</span>
+          ${inCooldown ? `<span class="resume-item-cooldown" data-cooldown-until="${cooldownUntil}">撞過流量限制，冷卻中，剩返 <span class="cooldown-seconds"></span> 秒先可以再繼續</span>` : ''}
         </div>
         <div class="resume-item-actions">
-          <button class="btn btn-primary btn-sm" data-resume-id="${j.id}">繼續搬運</button>
+          <button class="btn btn-primary btn-sm" data-resume-id="${j.id}" ${inCooldown ? 'disabled' : ''}>繼續搬運</button>
         </div>
       `;
       list.appendChild(row);
@@ -197,6 +200,32 @@
     list.querySelectorAll('[data-resume-id]').forEach((btn) => {
       btn.addEventListener('click', () => resumeJob(btn.dataset.resumeId));
     });
+    startCooldownTickers(list);
+  }
+
+  // 每秒更新一次冷卻倒數，時間到就自動解鎖「繼續搬運」按鈕。
+  function startCooldownTickers(list) {
+    const nodes = list.querySelectorAll('[data-cooldown-until]');
+    if (!nodes.length) return;
+    const tick = () => {
+      let anyLeft = false;
+      nodes.forEach((node) => {
+        const until = parseInt(node.dataset.cooldownUntil, 10);
+        const remaining = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+        const secSpan = node.querySelector('.cooldown-seconds');
+        if (secSpan) secSpan.textContent = remaining;
+        if (remaining <= 0) {
+          node.hidden = true;
+          const row = node.closest('.resume-item');
+          const btn = row && row.querySelector('[data-resume-id]');
+          if (btn) btn.disabled = false;
+        } else {
+          anyLeft = true;
+        }
+      });
+      if (anyLeft) setTimeout(tick, 1000);
+    };
+    tick();
   }
 
   async function resumeJob(jobId) {
@@ -375,8 +404,11 @@
     });
     const data = await res.json();
     if (!res.ok) {
-      el('manifestStatusText').textContent = '啟動失敗';
-      appendLogRow({ type: 'error', ts: Date.now(), message: data.error || '未知錯誤' });
+      // 啟動失敗（例如同一帳戶已經有 job 進行緊）：還原返畫面，唔好留喺一個假嘅「搬運中」狀態。
+      el('pulseDot').style.display = 'none';
+      el('manifest').hidden = true;
+      el('preRunActions').hidden = false;
+      alert(data.error || '啟動失敗，請稍後再試');
       return;
     }
     subscribeToJob(data.jobId);

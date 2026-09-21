@@ -173,6 +173,54 @@ const activeJobs = new Map(); // jobId -> { emitter, cancelled, bytesDone }
 // 又唔會因為資料夾樹好深/好闊而令並行數量失控（無論邊一層都係用返同一個 limiter）。
 const DRIVE_CONCURRENCY = parseInt(process.env.DRIVE_CONCURRENCY, 10) || 8;
 
+// ---- 全域速率限制（跨所有 job）----
+// 上面嘅 DRIVE_CONCURRENCY 淨係限制「單一個 job」入面幾多條請求並行，
+// 但如果同一時間有兩個或以上嘅 job 一齊跑（例如撳咗「繼續搬運」但舊 job 都未死透），
+// 成個 process 對 Google 嘅總請求速率就會冇上限咁疊加上去，呢個先係之前爆量嘅真正主因。
+// 用一個 process 層面（唔理幾多個 job）共用嘅 token bucket，將總請求速率硬鎖喺一個上限之內，
+// 就算防唔到重疊 job，都唔會再打爆 Google 嘅配額。
+const DRIVE_MAX_RPS = parseInt(process.env.DRIVE_MAX_RPS, 10) || 10;
+
+function createTokenBucket(ratePerSec, burst) {
+  let tokens = burst;
+  let lastRefill = Date.now();
+  const waiters = [];
+
+  function refill() {
+    const now = Date.now();
+    const elapsed = (now - lastRefill) / 1000;
+    if (elapsed > 0) {
+      tokens = Math.min(burst, tokens + elapsed * ratePerSec);
+      lastRefill = now;
+    }
+  }
+
+  function drain() {
+    refill();
+    while (waiters.length > 0 && tokens >= 1) {
+      tokens -= 1;
+      const resolve = waiters.shift();
+      resolve();
+    }
+    if (waiters.length > 0) {
+      const need = 1 - tokens;
+      const waitMs = Math.max(10, Math.ceil((need / ratePerSec) * 1000));
+      setTimeout(drain, waitMs);
+    }
+  }
+
+  // 每次要打 Drive API 之前都要 await 呢個 function，等到有 token 先算數。
+  return function acquire() {
+    return new Promise((resolve) => {
+      waiters.push(resolve);
+      drain();
+    });
+  };
+}
+
+// burst 開 2 倍 rate，等偶發嘅短時間爆發都仲可以即刻通過，但長時間平均速率一定唔會超過 DRIVE_MAX_RPS。
+const globalThrottle = createTokenBucket(DRIVE_MAX_RPS, Math.max(2, DRIVE_MAX_RPS * 2));
+
 function createLimiter(max) {
   let running = 0;
   const queue = [];
@@ -228,6 +276,7 @@ function isRetryableError(err) {
 async function withRetry(fn, retries = 7) {
   for (let i = 0; i < retries; i++) {
     try {
+      await globalThrottle(); // 先攞到全域 token 先真正發出請求，確保成個 process 嘅總速率有上限
       return await fn();
     } catch (err) {
       if (isRetryableError(err) && i < retries - 1) {
@@ -567,7 +616,15 @@ async function runCopyJob(jobId, oauthClient) {
     } else {
       const message = err.message || String(err);
       store.setJobStatus(jobId, 'error', message);
-      emitEvent(active, 'error', { message });
+      // 如果係撞到限流類錯誤（重試咗好多次都仲係咁），強制加一個冷卻期，
+      // 令使用者唔可以手快快即刻撳「繼續搬運」再爆一次流量。
+      const rateLimited = isRetryableError(err);
+      let cooldownUntil = 0;
+      if (rateLimited) {
+        cooldownUntil = Date.now() + 5 * 60 * 1000; // 冷卻 5 分鐘
+        store.setRateLimitedUntil(jobId, cooldownUntil);
+      }
+      emitEvent(active, 'error', { message, rateLimited, cooldownUntil });
     }
   } finally {
     setTimeout(() => activeJobs.delete(jobId), 5 * 60 * 1000);
@@ -588,6 +645,18 @@ app.post('/api/copy/start', requireAuth, async (req, res) => {
     const { data } = await oauth2.userinfo.get();
     accountEmail = data.email;
   } catch (_) {}
+
+  // 防止同一帳戶同時開多過一個 job——呢個先係之前爆量嘅真正主因
+  // （撳「再搬運一次」會開一個全新 job，但之前個 job 喺伺服器端可能其實仲未死透）。
+  if (accountEmail) {
+    const runningJob = store.getRunningJobForAccount(accountEmail);
+    if (runningJob) {
+      return res.status(409).json({
+        error: '呢個帳戶已經有一個搬運工作進行緊，請等佢完成或者取消之後先開新嘅，以免同時開多個 job 令 API 請求量疊加爆量。',
+        runningJobId: runningJob.id,
+      });
+    }
+  }
 
   store.createJob({
     id: jobId,
@@ -619,6 +688,26 @@ app.post('/api/copy/resume/:jobId', requireAuth, async (req, res) => {
   }
   if (!job.refresh_token) {
     return res.status(400).json({ error: '呢個工作冇儲存 refresh token，冇辦法自動繼續，請重新開始一次搬運。' });
+  }
+
+  // 撞過限流之後嘅強制冷卻期未過，唔俾即刻再繼續，以免手快快連續重試又觸發多一次限流。
+  if (job.rate_limited_until && job.rate_limited_until > Date.now()) {
+    const remainingSec = Math.ceil((job.rate_limited_until - Date.now()) / 1000);
+    return res.status(429).json({
+      error: `呢個工作啱啱撞過 Google 嘅流量限制，需要等 ${remainingSec} 秒先可以再繼續，以免再次觸發限流。`,
+      cooldownUntil: job.rate_limited_until,
+      remainingSec,
+    });
+  }
+
+  if (job.account_email) {
+    const runningJob = store.getRunningJobForAccount(job.account_email, job.id);
+    if (runningJob) {
+      return res.status(409).json({
+        error: '呢個帳戶已經有另一個搬運工作進行緊，請等佢完成或者取消之後先繼續呢一個，以免同時開多個 job 令 API 請求量疊加爆量。',
+        runningJobId: runningJob.id,
+      });
+    }
   }
 
   store.setJobStatus(job.id, 'running');
