@@ -66,6 +66,12 @@ CREATE TABLE IF NOT EXISTS skipped_items (
   source_item_id TEXT NOT NULL,
   PRIMARY KEY (job_id, source_item_id)
 );
+
+CREATE TABLE IF NOT EXISTS unchanged_items (
+  job_id TEXT NOT NULL,
+  source_item_id TEXT NOT NULL,
+  PRIMARY KEY (job_id, source_item_id)
+);
 `);
 
 // ---- 輕量 migration：舊資料庫冇呢啲欄位嘅話就補返 ----
@@ -194,6 +200,18 @@ function markSkipped(jobId, sourceItemId) {
   db.prepare(`INSERT OR IGNORE INTO skipped_items (job_id, source_item_id) VALUES (?, ?)`).run(jobId, sourceItemId);
 }
 
+// ---------- Unchanged items（sync 模式專用：等續傳／重新掃描時唔會重複計統計） ----------
+
+function isUnchangedMarked(jobId, sourceItemId) {
+  return !!db
+    .prepare(`SELECT 1 FROM unchanged_items WHERE job_id = ? AND source_item_id = ?`)
+    .get(jobId, sourceItemId);
+}
+
+function markUnchanged(jobId, sourceItemId) {
+  db.prepare(`INSERT OR IGNORE INTO unchanged_items (job_id, source_item_id) VALUES (?, ?)`).run(jobId, sourceItemId);
+}
+
 module.exports = {
   db,
   createJob,
@@ -213,4 +231,6 @@ module.exports = {
   markFileCopied,
   isSkipped,
   markSkipped,
+  isUnchangedMarked,
+  markUnchanged,
 };

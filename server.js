@@ -200,14 +200,42 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function withRetry(fn, retries = 5) {
+// Google 嘅限流唔一定係 429 —— 好多時係 403，用 reason 嚟分辨係唔係「可以重試」嘅限流，
+// 定係「唔會自己好返」嘅權限錯誤（例如冇權限、搵唔到檔案），後者唔應該重試。
+const RETRYABLE_REASONS = new Set([
+  'userRateLimitExceeded',
+  'rateLimitExceeded',
+  'quotaExceeded',
+  'dailyLimitExceeded',
+  'backendError',
+  'internalError',
+  'sharingRateLimitExceeded',
+]);
+
+function isRetryableError(err) {
+  const code = err.code || (err.response && err.response.status);
+  if (code === 429 || code === 500 || code === 503) return true;
+  if (code === 403) {
+    const errors = (err.errors) || (err.response && err.response.data && err.response.data.error && err.response.data.error.errors) || [];
+    if (errors.some((e) => RETRYABLE_REASONS.has(e.reason))) return true;
+    // Google 有時淨係喺 message 度講「User rate limit exceeded」，冇結構化 reason，都當可以重試。
+    const message = err.message || (err.response && err.response.data && err.response.data.error && err.response.data.error.message) || '';
+    if (/rate limit/i.test(message)) return true;
+  }
+  return false;
+}
+
+async function withRetry(fn, retries = 7) {
   for (let i = 0; i < retries; i++) {
     try {
       return await fn();
     } catch (err) {
-      const code = err.code || (err.response && err.response.status);
-      if ((code === 429 || code === 500 || code === 503) && i < retries - 1) {
-        await sleep(1000 * Math.pow(2, i));
+      if (isRetryableError(err) && i < retries - 1) {
+        // 限流錯誤本身冇話幾耐先可以再試，用長少少嘅 backoff（上限 30 秒）＋ 少少隨機，
+        // 避免並行請求撞埋一齊重試又即刻再撞流量上限。
+        const base = Math.min(30000, 1000 * Math.pow(2, i));
+        const jitter = Math.random() * 500;
+        await sleep(base + jitter);
         continue;
       }
       throw err;
@@ -408,7 +436,13 @@ async function syncFolderRecursive(jobId, active, drive, sourceFolderId, destFol
         }
       } else {
         const size = itemSize(item);
-        if (!existing) {
+        // 呢個檔案喺呢個 job 入面（可能係之前一次未完成嘅 run）已經處理過－－
+        // 唔理係新複製定係已更新，都直接跳過，唔再重新計統計／加 bytes。
+        // 冇呢個檢查嘅話，續傳（或者同一層被重新掃描）會將已經計過嘅檔案再計多次，
+        // 令個總進度數字不斷膨脹（甚至超過 100%）。
+        if (store.isFileCopied(jobId, item.id)) {
+          // 已經處理完，跳過
+        } else if (!existing) {
           await active.limiter(() => copyFile(drive, item.id, item.name, destFolderId, item.modifiedTime));
           store.markFileCopied(jobId, item.id);
           store.touchJobStats(jobId, { files: 1 });
@@ -424,7 +458,10 @@ async function syncFolderRecursive(jobId, active, drive, sourceFolderId, destFol
             store.touchJobStats(jobId, { updated: 1 });
             addBytes(jobId, active, size);
             emitEvent(active, 'update', { name: item.name, depth, size, bytesDone: active.bytesDone });
-          } else {
+          } else if (!store.isUnchangedMarked(jobId, item.id)) {
+            // 只有第一次判斷做「已係最新」先計入統計；呢個 job 之後再行過同一層
+            // （例如續傳）都唔會再計多次。
+            store.markUnchanged(jobId, item.id);
             store.touchJobStats(jobId, { unchanged: 1 });
             addBytes(jobId, active, size);
           }
